@@ -52,7 +52,7 @@ def generate_qr_png(uri: str, box_size: int = 9, border: int = 2) -> bytes:
     )
     qr.add_data(uri)
     qr.make(fit=True)
-    img = qr.make_image(fill_color="#0f172a", back_color="white")
+    img = qr.make_image(fill_color="#252421", back_color="white")
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()

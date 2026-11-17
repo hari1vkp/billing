@@ -9,6 +9,7 @@ from app.api import (
     inventory,
     invoices,
     payments,
+    pos,
     products,
     public,
     webhooks,
@@ -23,6 +24,7 @@ api_router.include_router(customers.router)
 api_router.include_router(products.router)
 api_router.include_router(invoices.router)
 api_router.include_router(payments.router)
+api_router.include_router(pos.router)
 api_router.include_router(analytics.router)
 api_router.include_router(inventory.router)
 api_router.include_router(activity.router)

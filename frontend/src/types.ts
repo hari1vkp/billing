@@ -471,3 +471,57 @@ export interface PublicPaymentInput {
 }
 
 export type QueryValue = string | number | boolean | null | undefined;
+
+/* ------------------------------------------------------------------ */
+/* Simplified POS checkout                                              */
+/* ------------------------------------------------------------------ */
+
+export interface PosCartLineInput {
+  product_id: string;
+  quantity: number;
+  discount_percent: number;
+}
+
+export interface PosQuoteRequest {
+  customer_id: string | null;
+  items: PosCartLineInput[];
+  discount_percent: number;
+  transaction_ref: string;
+}
+
+export interface PosQRResponse {
+  qr_data_url: string;
+  upi_uri: string;
+  amount: number;
+  upi_id: string;
+  upi_name: string;
+  business_name: string;
+  transaction_ref: string;
+  currency: string;
+  quote: {
+    subtotal: number;
+    discount_amount: number;
+    taxable_amount: number;
+    tax_amount: number;
+    total_amount: number;
+  };
+}
+
+export interface PosReceipt {
+  invoice_number: string;
+  transaction_ref?: string | null;
+  business_name: string;
+  customer_name?: string | null;
+  amount: number;
+  method: string;
+  reference?: string | null;
+  payment_date?: string | null;
+  status: string;
+  note: string;
+}
+
+export interface PosCheckoutResponse {
+  invoice: Invoice;
+  payment: Payment;
+  receipt: PosReceipt;
+}

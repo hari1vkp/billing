@@ -6,7 +6,6 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Barcode,
   CheckCircle2,
@@ -22,6 +21,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { CheckoutModal } from '../components/CheckoutModal';
 import {
   Badge,
   Button,
@@ -32,7 +32,7 @@ import {
   money,
   useToast,
 } from '../components/UI';
-import type { Customer, Invoice, Paginated, Product } from '../types';
+import type { Customer, Paginated, PosCheckoutResponse, Product } from '../types';
 
 interface CartLine {
   product: Product;
@@ -44,7 +44,6 @@ export function POS() {
   const { business } = useAuth();
   const currency = business?.currency ?? 'INR';
   const toast = useToast();
-  const navigate = useNavigate();
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [barcodeValue, setBarcodeValue] = useState('');
@@ -59,7 +58,7 @@ export function POS() {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState('Walk-in Customer');
   const [invoiceDiscount, setInvoiceDiscount] = useState('0');
-  const [checkingOut, setCheckingOut] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   const barcodeRef = useRef<HTMLInputElement>(null);
   const customerRef = useRef<HTMLDivElement>(null);
@@ -275,26 +274,22 @@ export function POS() {
     };
   }, [cart, invoiceDiscount]);
 
-  async function checkout() {
-    if (!cart.length || checkingOut) return;
-    setCheckingOut(true);
-    try {
-      const invoice = await api.post<Invoice>('/invoices', {
-        customer_id: customerId,
-        items: cart.map((line) => ({
-          product_id: line.product.id,
-          quantity: line.quantity,
-          discount_percent: line.discount_percent,
-        })),
-        discount_percent: Number(invoiceDiscount) || 0,
-      });
-      toast.success(`Invoice ${invoice.invoice_number} created`);
-      navigate(`/pos/payment/${invoice.id}`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not create the invoice.');
-    } finally {
-      setCheckingOut(false);
-    }
+  // Opening checkout does not touch the database. The invoice, payment and
+  // stock movements are created only when the cashier presses Complete Sale.
+  function openCheckout() {
+    if (!cart.length) return;
+    setCheckoutOpen(true);
+  }
+
+  function onSaleComplete(_result: PosCheckoutResponse) {
+    setCart([]);
+    setInvoiceDiscount('0');
+    setCustomerId(null);
+    setCustomerName('Walk-in Customer');
+    setCustomerQuery('');
+    setBarcodeValue('');
+    toast.success('Sale completed');
+    window.setTimeout(() => barcodeRef.current?.focus(), 0);
   }
 
   /* --------------------------------- render -------------------------------- */
@@ -598,19 +593,29 @@ export function POS() {
               size="lg"
               icon={<CheckCircle2 size={19} />}
               disabled={cart.length === 0}
-              loading={checkingOut}
-              onClick={() => void checkout()}
+              onClick={openCheckout}
             >
-              Checkout · {money(totals.total, currency)}
+              Proceed to Payment · {money(totals.total, currency)}
             </Button>
             <p className="pos-cart__hint">
               {cart.length === 0
                 ? 'Add at least one item to continue to payment.'
-                : 'Next: collect payment or share the UPI QR.'}
+                : 'UPI QR or cash — one step to complete the sale.'}
             </p>
           </div>
         </aside>
       </div>
+
+      <CheckoutModal
+        open={checkoutOpen}
+        cart={cart}
+        customerId={customerId}
+        discountPercent={Number(invoiceDiscount) || 0}
+        businessName={business?.name ?? 'BillFlow'}
+        currency={currency}
+        onCancel={() => setCheckoutOpen(false)}
+        onSaleComplete={onSaleComplete}
+      />
     </div>
   );
 }

@@ -25,6 +25,8 @@ class InvoiceCreate(BaseModel):
     due_date: date | None = None
     items: list[InvoiceItemCreate] = Field(min_length=1)
     discount_percent: float = Field(default=0, ge=0, le=100)
+    invoice_number: str | None = Field(default=None, max_length=50)
+    transaction_ref: str | None = Field(default=None, max_length=100)
     notes: str | None = None
     status: str = Field(default="unpaid", pattern="^(draft|unpaid)$")
 

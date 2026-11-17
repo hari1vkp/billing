@@ -151,6 +151,36 @@ def _resolve_customer(db: Session, business_id: str, customer_id: str | None) ->
     return customer.id
 
 
+def calculate_quote(
+    db: Session,
+    business_id: str,
+    items: list[InvoiceItemCreate],
+    discount_percent: float = 0,
+) -> dict:
+    """Compute the payable amounts for a cart without persisting anything.
+
+    Uses the same line-item engine as invoice creation so the amount shown on
+    the checkout QR always matches the amount recorded in PostgreSQL.
+    """
+    draft = Invoice(
+        business_id=business_id,
+        status="unpaid",
+        paid_amount=0,
+        discount_percent=discount_percent,
+        items=[],
+    )
+    for item in _build_items(db, business_id, items):
+        draft.items.append(item)
+    recalculate(draft)
+    return {
+        "subtotal": float(draft.subtotal),
+        "discount_amount": float(draft.discount_amount),
+        "taxable_amount": float(draft.taxable_amount),
+        "tax_amount": float(draft.tax_amount),
+        "total_amount": float(draft.total_amount),
+    }
+
+
 def create_invoice(db: Session, business_id: str, user_id: str, data: InvoiceCreate) -> Invoice:
     from app.models.business import Business
 
@@ -163,13 +193,41 @@ def create_invoice(db: Session, business_id: str, user_id: str, data: InvoiceCre
     issue_date = data.issue_date or date.today()
     # Default payment terms: 15 days.
     due_date = data.due_date or issue_date + timedelta(days=15)
-    invoice_number = repo.next_number(business_id, business.invoice_prefix)
+    if data.invoice_number:
+        already_used = db.query(Invoice.id).filter(
+            Invoice.business_id == business_id,
+            Invoice.invoice_number == data.invoice_number,
+        ).first()
+        if already_used:
+            # The supplied preview number was consumed by another sale. Ask the
+            # sequence for a fresh number until we find one that is free.
+            invoice_number = repo.next_number(business_id, business.invoice_prefix)
+            for _ in range(20):
+                clash = db.query(Invoice.id).filter(
+                    Invoice.business_id == business_id,
+                    Invoice.invoice_number == invoice_number,
+                ).first()
+                if not clash:
+                    break
+                invoice_number = repo.next_number(business_id, business.invoice_prefix)
+        else:
+            invoice_number = data.invoice_number
+            # Keep the tenant sequence in sync with a caller-supplied number so
+            # a later checkout preview can never hand out this number again.
+            suffix = data.invoice_number.rsplit("-", 1)[-1]
+            if suffix.isdigit():
+                business.invoice_sequence = max(
+                    business.invoice_sequence or 0, int(suffix)
+                )
+                db.flush()
+    else:
+        invoice_number = repo.next_number(business_id, business.invoice_prefix)
 
     invoice = Invoice(
         business_id=business_id,
         customer_id=customer_id,
         invoice_number=invoice_number,
-        transaction_ref=invoice_number,
+        transaction_ref=(data.transaction_ref or invoice_number),
         issue_date=issue_date,
         due_date=due_date,
         status=data.status,

@@ -16,7 +16,6 @@ import { Staff } from './pages/Staff';
 import { Activity } from './pages/Activity';
 import { Settings } from './pages/Settings';
 import { POS } from './pages/POS';
-import { POSPayment } from './pages/POSPayment';
 import { StaffStock } from './pages/StaffStock';
 
 function FullPageLoader() {
@@ -64,7 +63,6 @@ export default function App() {
         }
       >
         <Route path="/pos" element={<POS />} />
-        <Route path="/pos/payment/:invoiceId" element={<POSPayment />} />
         <Route path="/pos/stock" element={<StaffStock />} />
       </Route>
 

@@ -31,6 +31,12 @@ class InvoiceRepository(BaseRepository[Invoice]):
         year = date.today().year
         return f"{prefix}-{year}-{business.invoice_sequence:05d}"
 
+    def peek_number(self, business_id: str, prefix: str) -> str:
+        """Preview the next invoice number without consuming the sequence."""
+        business = self.db.get(Business, business_id)
+        sequence = (business.invoice_sequence or 0) if business else 0
+        return f"{prefix}-{date.today().year}-{sequence + 1:05d}"
+
     def get_with_items(self, business_id: str, invoice_id: str) -> Invoice | None:
         stmt = (
             select(Invoice)
