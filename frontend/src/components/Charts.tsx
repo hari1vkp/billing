@@ -21,14 +21,14 @@ import type {
 } from '../types';
 import { EmptyState, money, titleCase } from './UI';
 
-/* Muted bronze leads; the rest are warm neutral shades. No chromatic accents. */
-const COLORS = ['#936b52', '#252421', '#77736b', '#a8a297', '#c9c3b6', '#5d5a54'];
+/* Flame orange leads; jet black and muted grays carry the comparison series. */
+const COLORS = ['#FF6A00', '#0A0A0A', '#6B6862', '#B8B3AA', '#E4E0D8'];
 
-const BRONZE = '#936b52';
-const CHARCOAL = '#252421';
-const NEUTRAL = '#77736b';
-const GRID = '#e5e1d8';
-const HOVER = '#efebe3';
+const FLAME = '#FF6A00';
+const CHARCOAL = '#0A0A0A';
+const NEUTRAL = '#6B6862';
+const GRID = '#E4E0D8';
+const HOVER = '#EFECE5';
 
 const AXIS = { fontSize: 11, fill: NEUTRAL };
 
@@ -49,7 +49,7 @@ const tooltipStyle = {
   background: '#ffffff',
   borderRadius: 8,
   border: `1px solid ${GRID}`,
-  boxShadow: '0 8px 24px rgba(37, 36, 33, 0.10)',
+  boxShadow: '0 8px 24px rgba(10, 10, 10, 0.10)',
   color: CHARCOAL,
   fontSize: 12,
 };
@@ -85,9 +85,9 @@ export function SalesTrendChart({
           type="monotone"
           dataKey="sales"
           name="Sales"
-          stroke={BRONZE}
+          stroke={FLAME}
           strokeWidth={2}
-          fill={BRONZE}
+          fill={FLAME}
           fillOpacity={0.12}
           activeDot={{ r: 4 }}
         />
@@ -95,9 +95,9 @@ export function SalesTrendChart({
           type="monotone"
           dataKey="collections"
           name="Collections"
-          stroke={NEUTRAL}
+          stroke={CHARCOAL}
           strokeWidth={2}
-          fill={NEUTRAL}
+          fill={CHARCOAL}
           fillOpacity={0.08}
           activeDot={{ r: 4 }}
         />
@@ -134,11 +134,11 @@ export function SalesBarChart({
           formatter={(value) => money(Number(value), currency)}
         />
         <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-        <Bar dataKey="sales" name="Sales" fill={BRONZE} radius={[3, 3, 0, 0]} maxBarSize={26} />
+        <Bar dataKey="sales" name="Sales" fill={FLAME} radius={[3, 3, 0, 0]} maxBarSize={26} />
         <Bar
           dataKey="collections"
           name="Collections"
-          fill={NEUTRAL}
+          fill={CHARCOAL}
           radius={[3, 3, 0, 0]}
           maxBarSize={26}
         />

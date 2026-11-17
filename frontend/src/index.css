@@ -1,32 +1,50 @@
 /* ==================================================================
    BillFlow — design system
+   Jet black + soft white + flame orange
    ================================================================== */
 
 :root {
-  --navy: #252421;
-  --navy-soft: #3a3732;
-  --bg: #f5f3ee;
-  --surface: #ffffff;
-  --border: #e5e1d8;
-  --border-soft: #efebe3;
-  --text: #252421;
-  --muted: #77736b;
-  --muted-light: #a8a297;
-  --primary: #936b52;
-  --primary-dark: #79563f;
-  --primary-soft: #efebe3;
-  --success: #936b52;
-  --success-soft: #efebe3;
-  --warning: #a77b43;
-  --warning-soft: #f7f0e5;
-  --danger: #a65349;
-  --danger-soft: #f6ece9;
-  --info: #63605a;
-  --info-soft: #efebe3;
-  --radius: 10px;
-  --radius-sm: 8px;
+  /* Jet black — text & dark chrome */
+  --ink: #0A0A0A;
+  --navy: #0A0A0A;
+  --navy-soft: #1F1F1F;
+  --text: #0A0A0A;
+
+  /* Soft white canvas & pure surfaces */
+  --canvas: #F7F5F0;
+  --bg: #F7F5F0;
+  --surface: #FFFFFF;
+  --subtle: #EFECE5;
+  --border: #E4E0D8;
+  --border-soft: #EFECE5;
+
+  /* Neutrals */
+  --muted: #6B6862;
+  --muted-light: #9B968D;
+  --on-dark: #F7F5F0;
+  --on-dark-muted: #B8B3AA;
+
+  /* Flame orange — the only chromatic accent; signals interactivity */
+  --orange: #FF6A00;
+  --orange-hover: #E85D00;
+  --primary: #FF6A00;
+  --primary-dark: #E85D00;
+  --primary-soft: #EFECE5;
+
+  /* Status — settled states are jet black, never bright green */
+  --success: #0A0A0A;
+  --success-soft: #EFECE5;
+  --warning: #C97A21;
+  --warning-soft: #EFECE5;
+  --danger: #C0463B;
+  --danger-soft: #EFECE5;
+  --info: #6B6862;
+  --info-soft: #EFECE5;
+
+  --radius: 8px;
+  --radius-sm: 6px;
   --shadow: none;
-  --shadow-lg: 0 12px 32px rgba(37, 36, 33, 0.12);
+  --shadow-lg: 0 12px 28px rgba(10, 10, 10, 0.16);
   font-family: 'Inter', 'Geist', 'Manrope', ui-sans-serif, system-ui, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -74,6 +92,11 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* ---------- utility ---------- */
@@ -139,7 +162,7 @@ button {
   inset: 0 auto 0 0;
   width: 248px;
   background: var(--navy);
-  color: #b8b1a4;
+  color: #B8B3AA;
   display: flex;
   flex-direction: column;
   z-index: 60;
@@ -149,7 +172,7 @@ button {
 .sidebar-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(37, 36, 33, 0.5);
+  background: rgba(10, 10, 10, 0.5);
   z-index: 55;
 }
 
@@ -160,7 +183,7 @@ button {
   align-items: center;
   gap: 11px;
   padding: 0 20px;
-  border-bottom: 1px solid rgba(168, 162, 151, 0.14);
+  border-bottom: 1px solid rgba(247, 245, 240, 0.14);
 }
 
 .brand-mark {
@@ -192,23 +215,23 @@ button {
   font-size: 18px;
   font-weight: 500;
   letter-spacing: -0.4px;
-  color: #fff;
+  color: var(--on-dark);
 }
 .brand-name--light {
-  color: #fff;
+  color: var(--on-dark);
 }
 
 .brand-tag {
   display: block;
   font-size: 10.5px;
-  color: var(--muted-light);
+  color: var(--on-dark-muted);
   letter-spacing: 0.2px;
 }
 
 .sidebar__close {
   display: none;
   margin-left: auto;
-  color: #b8b1a4;
+  color: #B8B3AA;
   background: none;
   border: 0;
 }
@@ -218,7 +241,7 @@ button {
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 1.3px;
-  color: #b8b1a4;
+  color: #B8B3AA;
 }
 
 .sidebar__nav {
@@ -235,15 +258,15 @@ button {
   align-items: center;
   gap: 12px;
   padding: 10px 13px;
-  border-radius: 9px;
-  color: #a8a297;
+  border-radius: 8px;
+  color: var(--on-dark);
   font-size: 13.5px;
-  font-weight: 550;
+  font-weight: 500;
   transition: background 0.15s, color 0.15s;
 }
 .nav-item:hover {
-  background: rgba(168, 162, 151, 0.1);
-  color: #fff;
+  background: rgba(247, 245, 240, 0.1);
+  color: var(--on-dark);
 }
 .nav-item--active {
   background: var(--primary);
@@ -256,7 +279,7 @@ button {
 
 .sidebar__footer {
   padding: 16px;
-  border-top: 1px solid rgba(168, 162, 151, 0.14);
+  border-top: 1px solid rgba(247, 245, 240, 0.14);
 }
 
 .sidebar-business {
@@ -265,14 +288,14 @@ button {
   gap: 10px;
   padding: 10px;
   border-radius: 10px;
-  background: rgba(168, 162, 151, 0.08);
+  background: rgba(247, 245, 240, 0.08);
 }
 .sidebar-business__icon {
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  background: rgba(147, 107, 82, 0.2);
-  color: #c9a98f;
+  background: rgba(255, 106, 0, 0.2);
+  color: #FF6A00;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -284,19 +307,19 @@ button {
 .sidebar-business__info strong {
   display: block;
   font-size: 12.5px;
-  color: #efebe3;
+  color: var(--on-dark);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .sidebar-business__info span {
   font-size: 11px;
-  color: #a8a297;
+  color: var(--on-dark-muted);
 }
 .sidebar__version {
   text-align: center;
   font-size: 10.5px;
-  color: #a8a297;
+  color: var(--on-dark-muted);
   margin-top: 12px;
 }
 
@@ -444,8 +467,8 @@ button {
   height: 38px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--subtle);
+  color: var(--ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -620,19 +643,19 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--subtle);
+  color: var(--ink);
 }
 .stat-card--success .stat-card__icon {
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--subtle);
+  color: var(--ink);
 }
 .stat-card--warning .stat-card__icon {
-  background: var(--warning-soft);
+  background: var(--subtle);
   color: var(--warning);
 }
 .stat-card--danger .stat-card__icon {
-  background: var(--danger-soft);
+  background: var(--subtle);
   color: var(--danger);
 }
 .stat-card__trend {
@@ -642,8 +665,8 @@ button {
   border-radius: 6px;
 }
 .stat-card__trend.is-up {
-  color: var(--primary-dark);
-  background: var(--primary-soft);
+  color: var(--ink);
+  background: var(--subtle);
 }
 .stat-card__trend.is-down {
   color: var(--danger);
@@ -721,7 +744,7 @@ button {
 }
 .btn--secondary:hover:not(:disabled) {
   background: var(--bg);
-  border-color: #b8b1a4;
+  border-color: var(--border);
 }
 .btn--ghost {
   background: transparent;
@@ -736,14 +759,14 @@ button {
   color: #fff;
 }
 .btn--danger:hover:not(:disabled) {
-  background: #8f4139;
+  background: #A83E34;
 }
 .btn--subtle {
   background: var(--primary-soft);
   color: var(--primary);
 }
 .btn--subtle:hover:not(:disabled) {
-  background: #efebe3;
+  background: #EFECE5;
 }
 
 .icon-btn {
@@ -813,7 +836,7 @@ button {
 .badge--warning {
   background: var(--warning-soft);
   color: var(--warning);
-  border: 1px solid rgba(167, 123, 67, 0.28);
+  border: 1px solid rgba(201, 122, 33, 0.28);
 }
 .badge--info {
   background: var(--info-soft);
@@ -823,7 +846,7 @@ button {
 .badge--danger {
   background: var(--danger-soft);
   color: var(--danger);
-  border: 1px solid rgba(166, 83, 73, 0.2);
+  border: 1px solid rgba(192, 70, 59, 0.2);
 }
 .badge--neutral {
   background: var(--surface);
@@ -843,18 +866,18 @@ button {
 }
 .alert--error {
   background: var(--danger-soft);
-  color: #8f4139;
-  border: 1px solid #e3c1bb;
+  color: var(--danger);
+  border: 1px solid rgba(192, 70, 59, 0.3);
 }
 .alert--info {
   background: var(--info-soft);
-  color: #63605a;
-  border: 1px solid #ddd6cb;
+  color: #6B6862;
+  border: 1px solid #E4E0D8;
 }
 .alert--warning {
   background: var(--warning-soft);
-  color: #7d5a2e;
-  border: 1px solid #e0cda9;
+  color: #C97A21;
+  border: 1px solid rgba(201, 122, 33, 0.35);
 }
 
 /* ---------- forms ---------- */
@@ -872,7 +895,7 @@ button {
 .field__label {
   font-size: 12px;
   font-weight: 500;
-  color: #252421;
+  color: #0A0A0A;
 }
 .field__required {
   color: var(--danger);
@@ -900,11 +923,11 @@ button {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .input::placeholder {
-  color: #a8a297;
+  color: #9B968D;
 }
 .input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(147, 107, 82, 0.18);
+  box-shadow: 0 0 0 2px rgba(255, 106, 0, 0.18);
 }
 .input:disabled {
   background: var(--bg);
@@ -1042,7 +1065,7 @@ button {
 .data-table th {
   text-align: left;
   padding: 11px 16px;
-  background: #efebe3;
+  background: #EFECE5;
   color: var(--muted);
   font-size: 10.5px;
   font-weight: 500;
@@ -1063,7 +1086,7 @@ button {
   transition: background 0.12s;
 }
 .data-table tbody tr:hover {
-  background: #efebe3;
+  background: #EFECE5;
 }
 .data-table--compact th,
 .data-table--compact td {
@@ -1093,15 +1116,15 @@ button {
   height: 32px;
   flex-shrink: 0;
   border-radius: 8px;
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--subtle);
+  color: var(--ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 .cell-icon--service {
-  background: #efebe3;
-  color: #936b52;
+  background: var(--subtle);
+  color: var(--muted);
 }
 .rank-index {
   width: 22px;
@@ -1259,7 +1282,7 @@ button {
 }
 .toggle-chip--active {
   background: var(--warning-soft);
-  border-color: #d9b886;
+  border-color: rgba(201, 122, 33, 0.35);
   color: var(--warning);
 }
 
@@ -1315,7 +1338,7 @@ button {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(37, 36, 33, 0.5);
+  background: rgba(10, 10, 10, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1392,7 +1415,7 @@ button {
   gap: 10px;
   padding: 15px 24px;
   border-top: 1px solid var(--border);
-  background: #faf8f4;
+  background: #F7F5F0;
   flex-shrink: 0;
 }
 .confirm-text {
@@ -1411,7 +1434,7 @@ button {
   background: #fff;
   display: flex;
   flex-direction: column;
-  box-shadow: -12px 0 40px rgba(37, 36, 33, 0.16);
+  box-shadow: -12px 0 40px rgba(10, 10, 10, 0.16);
   animation: slideIn 0.22s ease;
 }
 @keyframes slideIn {
@@ -1444,7 +1467,7 @@ button {
   padding: 12px 13px;
   background: #fff;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--primary);
+  border-left: 3px solid var(--ink);
   border-radius: 10px;
   box-shadow: var(--shadow-lg);
   animation: riseIn 0.18s ease;
@@ -1460,7 +1483,7 @@ button {
 }
 .toast__icon {
   display: inline-flex;
-  color: var(--primary);
+  color: var(--ink);
 }
 .toast--success .toast__icon {
   color: var(--success);
@@ -1471,7 +1494,7 @@ button {
 .toast__message {
   flex: 1;
   font-size: 12.8px;
-  font-weight: 550;
+  font-weight: 500;
 }
 .toast__close {
   border: 0;
@@ -1546,7 +1569,7 @@ button {
 .totals-row--total strong {
   font-size: 16px;
   font-weight: 500;
-  color: var(--primary);
+  color: var(--text);
 }
 
 .detail-head {
@@ -1765,7 +1788,7 @@ button {
   align-items: flex-start;
   gap: 7px;
   font-size: 12px;
-  color: #252421;
+  color: #0A0A0A;
 }
 .contact-grid svg {
   color: var(--muted-light);
@@ -1815,7 +1838,7 @@ button {
 }
 .timeline__item p {
   font-size: 12.5px;
-  color: #252421;
+  color: #0A0A0A;
   background: var(--bg);
   border-radius: 8px;
   padding: 9px 11px;
@@ -1824,14 +1847,14 @@ button {
 /* ---------- payments ---------- */
 
 .attention-card {
-  border-color: #e0cda9;
-  background: #faf6ed;
+  border-color: rgba(201, 122, 33, 0.35);
+  background: #FFFFFF;
 }
 .attention-card__title {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #7d5a2e;
+  color: #C97A21;
 }
 .attention-list {
   display: flex;
@@ -1842,7 +1865,7 @@ button {
   align-items: center;
   gap: 12px;
   padding: 10px 0;
-  border-top: 1px solid #e6d3b3;
+  border-top: 1px solid #E4E0D8;
 }
 .attention-item__main {
   flex: 1;
@@ -1885,8 +1908,8 @@ button {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--subtle);
+  color: var(--ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1961,7 +1984,7 @@ button {
   position: relative;
   overflow: hidden;
   background: var(--navy);
-  color: #fff;
+  color: var(--on-dark);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1988,15 +2011,15 @@ button {
   gap: 7px;
   padding: 6px 11px;
   border-radius: 6px;
-  background: rgba(201, 169, 143, 0.16);
-  color: #c9a98f;
+  background: rgba(255, 106, 0, 0.16);
+  color: #FF6A00;
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.3px;
 }
 .auth-brand__copy h1 {
   margin-top: 22px;
-  font-size: clamp(28px, 3vw, 38px);
+  font-size: clamp(26px, 2.6vw, 32px);
   line-height: 1.12;
   font-weight: 500;
   letter-spacing: -1.8px;
@@ -2005,7 +2028,7 @@ button {
   margin-top: 18px;
   font-size: 14.5px;
   line-height: 1.7;
-  color: #b8b1a4;
+  color: #B8B3AA;
   max-width: 440px;
 }
 .auth-features {
@@ -2025,8 +2048,8 @@ button {
   height: 38px;
   flex-shrink: 0;
   border-radius: 10px;
-  background: rgba(168, 162, 151, 0.12);
-  color: #c9a98f;
+  background: rgba(247, 245, 240, 0.12);
+  color: #FF6A00;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2039,15 +2062,15 @@ button {
 .auth-feature span:not(.auth-feature__icon) {
   display: block;
   font-size: 12px;
-  color: #a8a297;
+  color: var(--on-dark-muted);
   margin-top: 3px;
   line-height: 1.5;
 }
 .demo-card {
   margin-top: 42px;
   max-width: 430px;
-  border: 1px solid rgba(168, 162, 151, 0.2);
-  background: rgba(168, 162, 151, 0.08);
+  border: 1px solid rgba(247, 245, 240, 0.2);
+  background: rgba(247, 245, 240, 0.08);
   border-radius: 10px;
   padding: 15px 17px;
 }
@@ -2055,7 +2078,7 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #d8bda3;
+  color: var(--on-dark);
   font-size: 12.5px;
 }
 .demo-card__body {
@@ -2067,13 +2090,13 @@ button {
 }
 .demo-card__body code {
   font-size: 12px;
-  background: rgba(37, 36, 33, 0.5);
+  background: rgba(10, 10, 10, 0.5);
   padding: 4px 8px;
   border-radius: 6px;
-  color: #e5e1d8;
+  color: #F7F5F0;
 }
 .demo-card__dot {
-  color: #a8a297;
+  color: var(--on-dark-muted);
 }
 .demo-card__button {
   display: inline-flex;
@@ -2083,16 +2106,16 @@ button {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #c9a98f;
+  color: #FF6A00;
   font-size: 12px;
   font-weight: 500;
 }
 .demo-card__button:hover {
-  color: #d8bda3;
+  color: var(--orange-hover);
 }
 .auth-brand__footer {
   font-size: 11px;
-  color: #a8a297;
+  color: var(--on-dark-muted);
 }
 
 .auth-form-side {
@@ -2141,8 +2164,8 @@ button {
 }
 .auth-tabs button.is-active {
   background: #fff;
-  color: var(--text);
-  box-shadow: 0 1px 3px rgba(37, 36, 33, 0.08);
+  color: var(--primary);
+  box-shadow: inset 0 -2px 0 var(--primary);
 }
 .auth-form {
   display: flex;
@@ -2195,7 +2218,7 @@ button {
   max-width: 1040px;
   margin: 4px auto 22px;
   background: var(--navy);
-  color: #fff;
+  color: var(--on-dark);
   border-radius: 10px;
   padding: 34px 40px;
   display: flex;
@@ -2207,18 +2230,18 @@ button {
   font-size: 10.5px;
   letter-spacing: 1.6px;
   font-weight: 500;
-  color: #c9a98f;
+  color: #FF6A00;
 }
 .public-hero h1 {
   margin-top: 10px;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.4px;
 }
 .public-hero > p {
   margin-top: 5px;
   font-size: 12.5px;
-  color: #a8a297;
+  color: var(--on-dark-muted);
 }
 .public-hero__amount {
   margin-top: 22px;
@@ -2229,10 +2252,10 @@ button {
 }
 .public-hero__amount > span {
   font-size: 11.5px;
-  color: #a8a297;
+  color: var(--on-dark-muted);
 }
 .public-hero__amount strong {
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.8px;
 }
@@ -2275,8 +2298,8 @@ button {
   flex-shrink: 0;
 }
 .public-card__icon--blue {
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--subtle);
+  color: var(--ink);
 }
 .public-card__icon--amber {
   background: var(--warning-soft);
@@ -2573,8 +2596,8 @@ button {
   gap: 14px;
   padding: 8px 20px;
   background: var(--navy);
-  color: #e5e1d8;
-  box-shadow: 0 1px 0 rgba(168, 162, 151, 0.16);
+  color: #F7F5F0;
+  box-shadow: 0 1px 0 rgba(247, 245, 240, 0.16);
 }
 .pos-topbar__left,
 .pos-topbar__nav {
@@ -2590,7 +2613,7 @@ button {
   flex-shrink: 0;
 }
 .pos-brand__name {
-  color: #fff;
+  color: var(--on-dark);
   font-size: 16px;
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -2598,11 +2621,11 @@ button {
 .pos-topbar__divider {
   width: 1px;
   height: 26px;
-  background: rgba(168, 162, 151, 0.24);
+  background: rgba(247, 245, 240, 0.24);
 }
 .pos-topbar__business {
   font-size: 13px;
-  color: #b8b1a4;
+  color: #B8B3AA;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2611,8 +2634,8 @@ button {
 .pos-topbar__badge {
   padding: 2px 7px;
   border-radius: 6px;
-  background: rgba(147, 107, 82, 0.22);
-  color: #c9a98f;
+  background: rgba(255, 106, 0, 0.22);
+  color: #FF6A00;
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.09em;
@@ -2627,25 +2650,25 @@ button {
   gap: 7px;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  color: #b8b1a4;
+  color: var(--on-dark);
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .pos-nav-link:hover {
-  background: rgba(168, 162, 151, 0.14);
-  color: #fff;
+  background: rgba(247, 245, 240, 0.14);
+  color: var(--on-dark);
 }
 .pos-nav-link--active {
-  background: rgba(147, 107, 82, 0.2);
-  color: #d8bda3;
+  background: rgba(255, 106, 0, 0.16);
+  color: var(--orange);
 }
 .pos-topbar .user-menu__trigger {
-  color: #e5e1d8;
+  color: #F7F5F0;
 }
 .pos-topbar .user-menu__trigger:hover {
-  background: rgba(168, 162, 151, 0.14);
+  background: rgba(247, 245, 240, 0.14);
 }
 .pos-topbar .avatar {
   background: var(--primary);
@@ -2682,7 +2705,7 @@ button {
 /* barcode scanner */
 .barcode-card {
   flex-shrink: 0;
-  border-color: #d8bda3;
+  border-color: #E4E0D8;
   box-shadow: none;
 }
 .barcode-box {
@@ -2698,8 +2721,8 @@ button {
   display: grid;
   place-items: center;
   border-radius: 10px;
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--subtle);
+  color: var(--ink);
 }
 .barcode-box__main {
   flex: 1;
@@ -2726,7 +2749,7 @@ button {
 }
 .barcode-input-wrap:focus-within {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(147, 107, 82, 0.18);
+  box-shadow: 0 0 0 2px rgba(255, 106, 0, 0.18);
   color: var(--primary);
 }
 .barcode-input {
@@ -2795,7 +2818,7 @@ button {
 }
 .pos-search:focus-within {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(147, 107, 82, 0.18);
+  box-shadow: 0 0 0 2px rgba(255, 106, 0, 0.18);
 }
 .pos-search .input {
   border: 0;
@@ -2831,7 +2854,7 @@ button {
 }
 .product-tile:hover {
   transform: translateY(-2px);
-  border-color: #c9a98f;
+  border-color: #FF6A00;
   box-shadow: none;
 }
 .product-tile:active {
@@ -2843,8 +2866,8 @@ button {
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--subtle);
+  color: var(--ink);
   margin-bottom: 2px;
 }
 .product-tile__name {
@@ -2984,7 +3007,7 @@ button {
   font-size: 12.5px;
 }
 .pos-customer__menu button:hover {
-  background: var(--primary-soft);
+  background: var(--subtle);
 }
 .pos-customer__option {
   display: flex;
@@ -3060,8 +3083,8 @@ button {
   color: var(--text);
 }
 .qty-stepper button:hover {
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--subtle);
+  color: var(--ink);
 }
 .qty-stepper input {
   width: 34px;
@@ -3154,7 +3177,7 @@ button {
 }
 .pos-totals__row--grand strong {
   font-size: 20px;
-  color: var(--primary);
+  color: var(--text);
   letter-spacing: -0.02em;
 }
 .pos-cart__footer {
@@ -3181,7 +3204,7 @@ button {
   padding: 20px 24px;
   border-radius: var(--radius);
   background: var(--navy);
-  color: #fff;
+  color: var(--on-dark);
   box-shadow: var(--shadow);
 }
 .payment-hero__eyebrow,
@@ -3189,7 +3212,7 @@ button {
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.14em;
-  color: #c9a98f;
+  color: #FF6A00;
 }
 .payment-hero h1 {
   margin-top: 5px;
@@ -3200,10 +3223,10 @@ button {
 .payment-hero p {
   margin-top: 4px;
   font-size: 12px;
-  color: #b8b1a4;
+  color: #B8B3AA;
 }
 .payment-hero p strong {
-  color: #fff;
+  color: var(--on-dark);
 }
 .payment-hero__amounts {
   display: flex;
@@ -3221,14 +3244,18 @@ button {
 }
 .payment-hero__amounts span {
   font-size: 11px;
-  color: #b8b1a4;
+  color: #B8B3AA;
 }
 .payment-hero__amounts strong {
   font-size: 20px;
   letter-spacing: -0.02em;
 }
 .payment-hero__balance {
-  background: var(--primary) !important;
+  background: var(--surface) !important;
+}
+.payment-hero__balance span,
+.payment-hero__balance strong {
+  color: var(--ink);
 }
 .payment-grid {
   display: grid;
@@ -3273,12 +3300,12 @@ button {
   gap: 10px;
   padding: 12px 14px;
   margin-bottom: 16px;
-  border: 1px solid #d9b886;
+  border: 1px solid rgba(201, 122, 33, 0.35);
   border-radius: var(--radius-sm);
   background: var(--warning-soft);
-  color: #7d5a2e;
+  color: #C97A21;
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   line-height: 1.5;
 }
 .payment-notice svg {
@@ -3286,9 +3313,9 @@ button {
   margin-top: 1px;
 }
 .payment-notice--info {
-  border-color: #d8bda3;
-  background: var(--primary-soft);
-  color: #63605a;
+  border-color: var(--border);
+  background: var(--subtle);
+  color: var(--muted);
 }
 .payment-qr-card {
   margin-top: 0;
@@ -3352,7 +3379,7 @@ button {
   font-weight: 500;
 }
 .payment-form--verify h3 {
-  color: var(--primary);
+  color: var(--ink);
 }
 .payment-form .btn {
   margin-top: 2px;
@@ -3364,7 +3391,7 @@ button {
   padding: 14px;
   border-radius: var(--radius-sm);
   background: var(--warning-soft);
-  color: #7d5a2e;
+  color: #C97A21;
 }
 .declaration-pending svg {
   flex-shrink: 0;
@@ -3463,7 +3490,7 @@ button {
 }
 .success-card__amount {
   margin: 20px 0 10px;
-  font-size: 38px;
+  font-size: 32px;
   font-weight: 500;
   color: var(--navy);
   letter-spacing: -0.03em;
@@ -3510,11 +3537,11 @@ button {
   gap: 10px;
   margin-bottom: 14px;
   padding: 11px 14px;
-  border-color: #d8bda3;
-  background: var(--primary-soft);
-  color: #63605a;
+  border-color: var(--border);
+  background: var(--subtle);
+  color: var(--muted);
   font-size: 12.5px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 /* admin sub-tabs and small additions */
@@ -3544,8 +3571,9 @@ button {
   color: var(--text);
 }
 .admin-tab--active {
-  background: var(--primary-soft);
+  background: var(--surface);
   color: var(--primary);
+  box-shadow: inset 0 -2px 0 var(--primary);
 }
 .staff-info-card {
   display: flex;
@@ -3553,9 +3581,9 @@ button {
   gap: 12px;
   margin-top: 16px;
   padding: 16px;
-  border-color: #d8bda3;
-  background: var(--primary-soft);
-  color: #63605a;
+  border-color: var(--border);
+  background: var(--subtle);
+  color: var(--muted);
 }
 .staff-info-card svg {
   flex-shrink: 0;
@@ -3568,7 +3596,7 @@ button {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.5;
-  color: #63605a;
+  color: #6B6862;
 }
 .activity-details-row td {
   background: var(--bg);
@@ -3789,7 +3817,7 @@ input[type='number'],
 }
 .checkout__total { text-align: right; }
 .checkout__total strong {
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1.1;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -3817,9 +3845,10 @@ input[type='number'],
 }
 .checkout-tab:hover { background: var(--bg); }
 .checkout-tab.is-active {
-  background: var(--primary-soft);
-  border-color: var(--primary);
-  color: var(--primary-dark);
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--primary);
+  box-shadow: inset 0 -2px 0 var(--primary);
 }
 
 .checkout-upi,
@@ -3851,7 +3880,7 @@ input[type='number'],
   line-height: 1.5;
 }
 .checkout-cash__amount {
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -3882,8 +3911,8 @@ input[type='number'],
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--subtle);
+  color: var(--ink);
   border: 1px solid var(--border);
 }
 .checkout-receipt__label {
@@ -3893,7 +3922,7 @@ input[type='number'],
 }
 .checkout-receipt__amount {
   margin: 2px 0 18px;
-  font-size: 36px;
+  font-size: 32px;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--text);
