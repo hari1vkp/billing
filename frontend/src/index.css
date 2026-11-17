@@ -357,7 +357,9 @@ button {
   font-size: 11.5px;
   color: var(--muted);
 }
-.topbar__menu {
+/* Keep this above .icon-btn in specificity: .icon-btn is declared later and
+   would otherwise override the desktop hide rule with display:inline-flex. */
+.icon-btn.topbar__menu {
   display: none;
 }
 
@@ -2450,7 +2452,7 @@ button {
   .main-shell {
     margin-left: 0;
   }
-  .topbar__menu {
+  .icon-btn.topbar__menu {
     display: inline-flex;
   }
   .grid-12 .col-8,
