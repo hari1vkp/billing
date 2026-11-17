@@ -1,0 +1,16 @@
+[package]
+name = "billflow-shared"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rusqlite = { workspace = true, features = ["backup"] }
+serde.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+uuid = { version = "1", features = ["v4"] }
+pbkdf2 = { version = "0.12", features = ["simple"] }
+sha2 = "0.10"
+qrcode = "0.14"
+image = { version = "0.25", default-features = false, features = ["png"] }
+printpdf = "0.7"

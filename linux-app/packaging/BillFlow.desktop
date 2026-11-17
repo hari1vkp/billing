@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=BillFlow
+GenericName=Billing and Business Analytics
+Comment=Smart billing, CRM and business analytics
+Exec=billflow
+Icon=billflow
+Categories=Office;Finance;
+Terminal=false
+StartupWMClass=billflow

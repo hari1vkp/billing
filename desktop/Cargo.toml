@@ -1,0 +1,10 @@
+[package]
+name = "billflow"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+billflow-shared = { path = "../shared" }
+eframe = { version = "0.31", default-features = false, features = ["glow", "x11", "default_fonts"] }
+egui = "0.31"
+chrono.workspace = true
