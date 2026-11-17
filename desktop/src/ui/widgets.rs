@@ -27,6 +27,7 @@ pub fn flat_card(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) -> Response {
         .fill(WHITE)
         .stroke(Stroke::new(1.0_f32, BORDER))
         .corner_radius(RADIUS)
+        .inner_margin(Margin::same(16))
         .show(ui, add_contents)
         .response
 }
@@ -132,7 +133,7 @@ pub fn label(ui: &mut Ui, text: impl Into<String>, color: Color32, size: f32) ->
 }
 
 pub fn muted(ui: &mut Ui, text: impl Into<String>) -> Response {
-    label(ui, text, MUTED, 12.0)
+    label(ui, text, MUTED, 12.5)
 }
 
 pub fn caption(ui: &mut Ui, text: impl Into<String>) -> Response {
@@ -140,17 +141,18 @@ pub fn caption(ui: &mut Ui, text: impl Into<String>) -> Response {
 }
 
 pub fn section_title(ui: &mut Ui, title: &str, subtitle: Option<&str>) {
-    ui.label(RichText::new(title).size(15.0).color(INK).strong());
+    ui.label(RichText::new(title).size(16.0).color(INK));
     if let Some(sub) = subtitle {
+        ui.add_space(3.0);
         muted(ui, sub);
     }
 }
 
 pub fn page_header(ui: &mut Ui, title: &str, subtitle: &str) {
     ui.label(RichText::new(title).size(21.0).color(INK).strong());
-    ui.add_space(2.0);
+    ui.add_space(4.0);
     muted(ui, subtitle);
-    ui.add_space(16.0);
+    ui.add_space(18.0);
 }
 
 /// Money text uses a monospace font so digits are tabular (fixed width).
@@ -184,13 +186,13 @@ pub fn badge(ui: &mut Ui, text: impl Into<String>, subtle: bool) -> Response {
 pub fn kpi(ui: &mut Ui, label: &str, value: &str, hint: &str, is_money: bool) {
     card(ui, |ui| {
         ui.label(RichText::new(label).size(12.5).color(MUTED).strong());
-        ui.add_space(9.0);
+        ui.add_space(10.0);
         if is_money {
-            ui.label(money_text(value.parse::<f64>().unwrap_or(0.0), 19.0, INK));
+            ui.label(money_text(value.parse::<f64>().unwrap_or(0.0), 20.0, INK));
         } else {
-            ui.label(RichText::new(value).size(19.0).color(INK).strong());
+            ui.label(RichText::new(value).size(20.0).color(INK).strong());
         }
-        ui.add_space(5.0);
+        ui.add_space(4.0);
         caption(ui, hint);
     });
 }

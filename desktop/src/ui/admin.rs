@@ -302,29 +302,39 @@ impl Default for AdminState {
 /* ------------------------------- shell ----------------------------------- */
 
 pub fn shell(app: &mut App, ctx: &Context) {
+    // Fixed 248px sidebar spanning the full window height (web `.sidebar`).
     egui::SidePanel::left("admin_sidebar")
         .exact_width(248.0)
         .resizable(false)
         .frame(Frame::new().fill(INK))
         .show(ctx, |ui| sidebar(app, ui));
 
+    // The 72px topbar only covers the area to the right of the sidebar, so the
+    // sidebar stays black edge-to-edge (web `.topbar` inside `.main-shell`).
+    egui::TopBottomPanel::top("admin_topbar")
+        .exact_height(72.0)
+        .frame(Frame::new().fill(CANVAS))
+        .show(ctx, |ui| topbar(app, ui));
+
     egui::CentralPanel::default()
         .frame(Frame::new().fill(CANVAS))
         .show(ctx, |ui| {
-            topbar(app, ui);
             egui::ScrollArea::vertical()
                 .id_salt("admin_content")
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    ui.add_space(27.0);
+                    // web `.content`: padding 28px 32px 48px, max-width 1680.
+                    ui.add_space(28.0);
+                    let avail = ui.available_width();
+                    let content_w = (avail - 64.0).min(1680.0).max(0.0);
+                    let inset = (avail - content_w) / 2.0;
                     ui.horizontal(|ui| {
-                        ui.add_space(32.0);
-                        ui.allocate_ui(Vec2::new(ui.available_width() - 64.0, 1.0), |ui| {
+                        ui.add_space(inset);
+                        ui.allocate_ui(Vec2::new(content_w, ui.available_height()), |ui| {
                             page_content(app, ui);
                         });
-                        ui.add_space(32.0);
                     });
-                    ui.add_space(40.0);
+                    ui.add_space(48.0);
                 });
         });
 }
@@ -419,34 +429,46 @@ fn sidebar(app: &mut App, ui: &mut Ui) {
 }
 
 fn topbar(app: &mut App, ui: &mut Ui) {
-    ui.add_space(19.0);
-    ui.horizontal(|ui| {
+    ui.horizontal_centered(|ui| {
         ui.add_space(32.0);
         ui.vertical(|ui| {
-            ui.label(egui::RichText::new(app.admin.page.label()).size(16.0).color(INK).strong());
-            ui.label(egui::RichText::new(app.admin.page.subtitle()).size(11.0).color(MUTED));
+            ui.label(
+                egui::RichText::new(app.admin.page.label())
+                    .size(16.5)
+                    .color(INK),
+            );
+            ui.label(
+                egui::RichText::new(app.admin.page.subtitle())
+                    .size(11.5)
+                    .color(MUTED),
+            );
         });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if w::ghost(ui, "Sign out").clicked() {
                 app.logout();
                 return;
             }
-            let name = app.user.as_ref().map(|u| u.full_name.clone()).unwrap_or_default();
-            ui.label(egui::RichText::new(name).size(12.0).color(INK));
-            ui.add_space(6.0);
+            let name = app
+                .user
+                .as_ref()
+                .map(|u| u.full_name.clone())
+                .unwrap_or_default();
+            ui.label(egui::RichText::new(name).size(12.5).color(INK));
+            ui.add_space(8.0);
             if w::primary(ui, "Open POS").clicked() {
                 app.open_pos();
             }
         });
         ui.add_space(32.0);
     });
-    ui.add_space(15.0);
-    let rect = ui.available_rect_before_wrap();
+
+    // Bottom border of the topbar.
+    let rect = ui.max_rect();
+    let y = rect.bottom() - 1.0;
     ui.painter().line_segment(
-        [egui::pos2(rect.left(), rect.top()), egui::pos2(rect.right(), rect.top())],
+        [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
         Stroke::new(1.0_f32, BORDER),
     );
-    ui.add_space(2.0);
 }
 
 fn page_content(app: &mut App, ui: &mut Ui) {

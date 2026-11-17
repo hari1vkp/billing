@@ -27,9 +27,7 @@ impl App {
 
         match self.screen {
             Screen::Login => {
-                egui::CentralPanel::default()
-                    .frame(Frame::new().fill(WHITE))
-                    .show(ctx, |ui| login::ui(self, ctx, ui));
+                login::ui(self, ctx);
             }
             Screen::Pos => {
                 pos::top_bar(self, ctx);
