@@ -21,9 +21,16 @@ import type {
 } from '../types';
 import { EmptyState, money, titleCase } from './UI';
 
-const COLORS = ['#2563eb', '#0ea5e9', '#14b8a6', '#f59e0b', '#8b5cf6', '#ef4444', '#64748b'];
+/* Muted bronze leads; the rest are warm neutral shades. No chromatic accents. */
+const COLORS = ['#936b52', '#252421', '#77736b', '#a8a297', '#c9c3b6', '#5d5a54'];
 
-const AXIS = { fontSize: 11, fill: '#64748b' };
+const BRONZE = '#936b52';
+const CHARCOAL = '#252421';
+const NEUTRAL = '#77736b';
+const GRID = '#e5e1d8';
+const HOVER = '#efebe3';
+
+const AXIS = { fontSize: 11, fill: NEUTRAL };
 
 function compactMoney(value: number, currency: string): string {
   return new Intl.NumberFormat('en-IN', {
@@ -39,9 +46,11 @@ function ChartEmpty({ label }: { label: string }) {
 }
 
 const tooltipStyle = {
-  borderRadius: 10,
-  border: '1px solid #e2e8f0',
-  boxShadow: '0 10px 30px rgba(15, 23, 42, 0.10)',
+  background: '#ffffff',
+  borderRadius: 8,
+  border: `1px solid ${GRID}`,
+  boxShadow: '0 8px 24px rgba(37, 36, 33, 0.10)',
+  color: CHARCOAL,
   fontSize: 12,
 };
 
@@ -58,17 +67,7 @@ export function SalesTrendChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#2563eb" stopOpacity={0.22} />
-            <stop offset="95%" stopColor="#2563eb" stopOpacity={0.01} />
-          </linearGradient>
-          <linearGradient id="collectionsFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.18} />
-            <stop offset="95%" stopColor="#14b8a6" stopOpacity={0.01} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid vertical={false} stroke="#eef2f7" />
+        <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis dataKey="period" tick={AXIS} axisLine={false} tickLine={false} dy={8} />
         <YAxis
           tick={AXIS}
@@ -86,19 +85,21 @@ export function SalesTrendChart({
           type="monotone"
           dataKey="sales"
           name="Sales"
-          stroke="#2563eb"
-          strokeWidth={2.5}
-          fill="url(#salesFill)"
-          activeDot={{ r: 5 }}
+          stroke={BRONZE}
+          strokeWidth={2}
+          fill={BRONZE}
+          fillOpacity={0.12}
+          activeDot={{ r: 4 }}
         />
         <Area
           type="monotone"
           dataKey="collections"
           name="Collections"
-          stroke="#14b8a6"
-          strokeWidth={2.5}
-          fill="url(#collectionsFill)"
-          activeDot={{ r: 5 }}
+          stroke={NEUTRAL}
+          strokeWidth={2}
+          fill={NEUTRAL}
+          fillOpacity={0.08}
+          activeDot={{ r: 4 }}
         />
       </AreaChart>
     </ResponsiveContainer>
@@ -118,7 +119,7 @@ export function SalesBarChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={4}>
-        <CartesianGrid vertical={false} stroke="#eef2f7" />
+        <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis dataKey="period" tick={AXIS} axisLine={false} tickLine={false} dy={8} />
         <YAxis
           tick={AXIS}
@@ -129,16 +130,16 @@ export function SalesBarChart({
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          cursor={{ fill: '#f1f5f9' }}
+          cursor={{ fill: HOVER }}
           formatter={(value) => money(Number(value), currency)}
         />
         <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-        <Bar dataKey="sales" name="Sales" fill="#2563eb" radius={[5, 5, 0, 0]} maxBarSize={26} />
+        <Bar dataKey="sales" name="Sales" fill={BRONZE} radius={[3, 3, 0, 0]} maxBarSize={26} />
         <Bar
           dataKey="collections"
           name="Collections"
-          fill="#14b8a6"
-          radius={[5, 5, 0, 0]}
+          fill={NEUTRAL}
+          radius={[3, 3, 0, 0]}
           maxBarSize={26}
         />
       </BarChart>
@@ -167,8 +168,9 @@ export function PaymentMethodsChart({
           cy="46%"
           innerRadius={58}
           outerRadius={86}
-          paddingAngle={3}
-          stroke="none"
+          paddingAngle={2}
+          stroke="#ffffff"
+          strokeWidth={2}
         >
           {data.map((entry, index) => (
             <Cell key={`${entry.method}-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -207,7 +209,7 @@ export function StatusBreakdownChart({
         margin={{ top: 4, right: 24, left: 8, bottom: 0 }}
         barCategoryGap={14}
       >
-        <CartesianGrid horizontal={false} stroke="#eef2f7" />
+        <CartesianGrid horizontal={false} stroke={GRID} />
         <XAxis
           type="number"
           tick={AXIS}
@@ -226,10 +228,10 @@ export function StatusBreakdownChart({
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          cursor={{ fill: '#f1f5f9' }}
+          cursor={{ fill: HOVER }}
           formatter={(value) => money(Number(value), currency)}
         />
-        <Bar dataKey="amount" name="Amount" radius={[0, 5, 5, 0]} maxBarSize={20}>
+        <Bar dataKey="amount" name="Amount" radius={[0, 3, 3, 0]} maxBarSize={20}>
           {data.map((entry, index) => (
             <Cell key={`${entry.status}-${index}`} fill={COLORS[index % COLORS.length]} />
           ))}
@@ -258,7 +260,7 @@ export function TopProductsChart({
         margin={{ top: 4, right: 24, left: 8, bottom: 0 }}
         barCategoryGap={12}
       >
-        <CartesianGrid horizontal={false} stroke="#eef2f7" />
+        <CartesianGrid horizontal={false} stroke={GRID} />
         <XAxis
           type="number"
           tick={AXIS}
@@ -279,10 +281,10 @@ export function TopProductsChart({
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          cursor={{ fill: '#f1f5f9' }}
+          cursor={{ fill: HOVER }}
           formatter={(value) => money(Number(value), currency)}
         />
-        <Bar dataKey="revenue" name="Revenue" fill="#6366f1" radius={[0, 5, 5, 0]} maxBarSize={18} />
+        <Bar dataKey="revenue" name="Revenue" fill={CHARCOAL} radius={[0, 3, 3, 0]} maxBarSize={18} />
       </BarChart>
     </ResponsiveContainer>
   );

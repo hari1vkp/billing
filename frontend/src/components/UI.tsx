@@ -87,15 +87,18 @@ export type Tone = 'success' | 'warning' | 'info' | 'danger' | 'neutral';
 
 export function statusTone(status?: string | null): Tone {
   switch ((status ?? '').toLowerCase()) {
+    // Settled states: warm bronze fill with light text.
     case 'paid':
     case 'confirmed':
     case 'completed':
     case 'active':
       return 'success';
+    // Outstanding states: white surface, soft border, secondary text.
     case 'unpaid':
     case 'draft':
     case 'submitted':
     case 'pending':
+      return 'neutral';
     case 'low_stock':
       return 'warning';
     case 'partially_paid':
@@ -103,9 +106,9 @@ export function statusTone(status?: string | null): Tone {
       return 'info';
     case 'overdue':
     case 'failed':
-      return 'danger';
     case 'cancelled':
     case 'refunded':
+      return 'danger';
     case 'inactive':
     case 'archived':
       return 'neutral';
