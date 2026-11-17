@@ -1,0 +1,19 @@
+---
+description: Always commit changes at the end of every task/prompt
+alwaysApply: true
+---
+
+# Commit changes for every prompt
+
+After completing any task or prompt in this project, commit the resulting changes
+to git. Do not leave work uncommitted at the end of a turn.
+
+- Stage only the files relevant to the task (`git add <paths>`), never blanket
+  `git add -A` unless the whole workspace is confirmed to belong to the task.
+- Write a concise, descriptive commit message that explains *what* changed and
+  *why* (e.g. `feat(pos): add barcode-first billing screen`).
+- If there is nothing to commit (for example a read-only question), say so
+  explicitly instead of making an empty commit.
+- Do not push, open PRs, or modify remotes unless the user asks for that too.
+- Verify the commit with `git status --short` and include the short SHA in the
+  final response.

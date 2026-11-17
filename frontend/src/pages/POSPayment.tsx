@@ -254,7 +254,7 @@ export function POSPayment() {
     return (
       <div className="pos-page pos-payment-page">
         <Card className="success-card">
-          <div className="success-card__icon"><CheckCircle2 size={56} strokeWidth={1.5} /></div>
+          <div className="success-card__icon"><CheckCircle2 size={56} strokeWidth={1.8} /></div>
           <h1>Payment received</h1>
           <p>Invoice {invoice.invoice_number} has been marked as paid.</p>
           <div className="success-card__amount">{money(success.amount, currency)}</div>

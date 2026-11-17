@@ -21,10 +21,9 @@ import type {
 } from '../types';
 import { EmptyState, money, titleCase } from './UI';
 
-/* Achromatic series palette: primary ink first, then progressively lighter tones. */
-const COLORS = ['#141414', '#707070', '#adadad', '#c2c2c2'];
+const COLORS = ['#2563eb', '#0ea5e9', '#14b8a6', '#f59e0b', '#8b5cf6', '#ef4444', '#64748b'];
 
-const AXIS = { fontSize: 11, fill: '#707070' };
+const AXIS = { fontSize: 11, fill: '#64748b' };
 
 function compactMoney(value: number, currency: string): string {
   return new Intl.NumberFormat('en-IN', {
@@ -40,9 +39,9 @@ function ChartEmpty({ label }: { label: string }) {
 }
 
 const tooltipStyle = {
-  borderRadius: 16,
-  border: '1px solid #ededed',
-  boxShadow: 'rgba(0, 0, 0, 0.04) 0px 8px 40px 0px',
+  borderRadius: 10,
+  border: '1px solid #e2e8f0',
+  boxShadow: '0 10px 30px rgba(15, 23, 42, 0.10)',
   fontSize: 12,
 };
 
@@ -61,15 +60,15 @@ export function SalesTrendChart({
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#141414" stopOpacity={0.16} />
-            <stop offset="95%" stopColor="#141414" stopOpacity={0.01} />
+            <stop offset="5%" stopColor="#2563eb" stopOpacity={0.22} />
+            <stop offset="95%" stopColor="#2563eb" stopOpacity={0.01} />
           </linearGradient>
           <linearGradient id="collectionsFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#adadad" stopOpacity={0.16} />
-            <stop offset="95%" stopColor="#adadad" stopOpacity={0.01} />
+            <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.18} />
+            <stop offset="95%" stopColor="#14b8a6" stopOpacity={0.01} />
           </linearGradient>
         </defs>
-        <CartesianGrid vertical={false} stroke="#ededed" />
+        <CartesianGrid vertical={false} stroke="#eef2f7" />
         <XAxis dataKey="period" tick={AXIS} axisLine={false} tickLine={false} dy={8} />
         <YAxis
           tick={AXIS}
@@ -87,7 +86,7 @@ export function SalesTrendChart({
           type="monotone"
           dataKey="sales"
           name="Sales"
-          stroke="#141414"
+          stroke="#2563eb"
           strokeWidth={2.5}
           fill="url(#salesFill)"
           activeDot={{ r: 5 }}
@@ -96,7 +95,7 @@ export function SalesTrendChart({
           type="monotone"
           dataKey="collections"
           name="Collections"
-          stroke="#adadad"
+          stroke="#14b8a6"
           strokeWidth={2.5}
           fill="url(#collectionsFill)"
           activeDot={{ r: 5 }}
@@ -119,7 +118,7 @@ export function SalesBarChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={4}>
-        <CartesianGrid vertical={false} stroke="#ededed" />
+        <CartesianGrid vertical={false} stroke="#eef2f7" />
         <XAxis dataKey="period" tick={AXIS} axisLine={false} tickLine={false} dy={8} />
         <YAxis
           tick={AXIS}
@@ -130,15 +129,15 @@ export function SalesBarChart({
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          cursor={{ fill: '#f2f2f2' }}
+          cursor={{ fill: '#f1f5f9' }}
           formatter={(value) => money(Number(value), currency)}
         />
         <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-        <Bar dataKey="sales" name="Sales" fill="#141414" radius={[5, 5, 0, 0]} maxBarSize={26} />
+        <Bar dataKey="sales" name="Sales" fill="#2563eb" radius={[5, 5, 0, 0]} maxBarSize={26} />
         <Bar
           dataKey="collections"
           name="Collections"
-          fill="#adadad"
+          fill="#14b8a6"
           radius={[5, 5, 0, 0]}
           maxBarSize={26}
         />
@@ -208,7 +207,7 @@ export function StatusBreakdownChart({
         margin={{ top: 4, right: 24, left: 8, bottom: 0 }}
         barCategoryGap={14}
       >
-        <CartesianGrid horizontal={false} stroke="#ededed" />
+        <CartesianGrid horizontal={false} stroke="#eef2f7" />
         <XAxis
           type="number"
           tick={AXIS}
@@ -227,7 +226,7 @@ export function StatusBreakdownChart({
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          cursor={{ fill: '#f2f2f2' }}
+          cursor={{ fill: '#f1f5f9' }}
           formatter={(value) => money(Number(value), currency)}
         />
         <Bar dataKey="amount" name="Amount" radius={[0, 5, 5, 0]} maxBarSize={20}>
@@ -259,7 +258,7 @@ export function TopProductsChart({
         margin={{ top: 4, right: 24, left: 8, bottom: 0 }}
         barCategoryGap={12}
       >
-        <CartesianGrid horizontal={false} stroke="#ededed" />
+        <CartesianGrid horizontal={false} stroke="#eef2f7" />
         <XAxis
           type="number"
           tick={AXIS}
@@ -280,10 +279,10 @@ export function TopProductsChart({
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          cursor={{ fill: '#f2f2f2' }}
+          cursor={{ fill: '#f1f5f9' }}
           formatter={(value) => money(Number(value), currency)}
         />
-        <Bar dataKey="revenue" name="Revenue" fill="#141414" radius={[0, 5, 5, 0]} maxBarSize={18} />
+        <Bar dataKey="revenue" name="Revenue" fill="#6366f1" radius={[0, 5, 5, 0]} maxBarSize={18} />
       </BarChart>
     </ResponsiveContainer>
   );

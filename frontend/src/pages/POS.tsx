@@ -306,7 +306,7 @@ export function POS() {
           <Card className="barcode-card" padded={false}>
             <div className="barcode-box">
               <div className="barcode-box__icon">
-                <ScanBarcode size={26} strokeWidth={1.5} />
+                <ScanBarcode size={26} strokeWidth={2} />
               </div>
               <div className="barcode-box__main">
                 <label className="barcode-box__label" htmlFor="pos-barcode">

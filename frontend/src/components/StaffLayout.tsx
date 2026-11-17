@@ -42,7 +42,7 @@ export function StaffLayout() {
         <div className="pos-topbar__left">
           <Link to="/pos" className="pos-brand" aria-label="BillFlow POS home">
             <span className="brand-mark brand-mark--light">
-              <ReceiptText size={19} strokeWidth={1.5} />
+              <ReceiptText size={19} strokeWidth={2.4} />
             </span>
             <span className="pos-brand__name">BillFlow</span>
           </Link>

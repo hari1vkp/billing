@@ -88,7 +88,7 @@ export function Layout() {
       <aside className={`sidebar ${mobileOpen ? 'sidebar--open' : ''}`}>
         <div className="sidebar__brand">
           <div className="brand-mark">
-            <ReceiptText size={20} strokeWidth={1.5} />
+            <ReceiptText size={20} strokeWidth={2.4} />
           </div>
           <div className="brand-text">
             <span className="brand-name">BillFlow</span>
@@ -115,7 +115,7 @@ export function Layout() {
                 end={item.end}
                 className={({ isActive }) => `nav-item ${isActive ? 'nav-item--active' : ''}`}
               >
-                <Icon size={18} strokeWidth={1.5} />
+                <Icon size={18} strokeWidth={2} />
                 <span>{item.label}</span>
               </NavLink>
             );

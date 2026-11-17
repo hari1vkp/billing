@@ -82,7 +82,7 @@ export function Login() {
         <div className="auth-brand__content">
           <div className="auth-logo">
             <span className="brand-mark brand-mark--light">
-              <ReceiptText size={22} strokeWidth={1.5} />
+              <ReceiptText size={22} strokeWidth={2.4} />
             </span>
             <span className="brand-name brand-name--light">BillFlow</span>
           </div>
