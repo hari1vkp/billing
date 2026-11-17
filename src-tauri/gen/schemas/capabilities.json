@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Minimal permissions for BillFlow: core defaults, a native save dialog and opening generated files with the OS. All privileged work is done by custom Rust commands.","local":true,"windows":["main"],"permissions":["core:default","dialog:allow-save","shell:allow-open"]}}

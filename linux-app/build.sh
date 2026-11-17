@@ -1,65 +1,81 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# BillFlow native Linux build + portable packaging.
-# Runs entirely as a normal user: no sudo, no Node, no Python, no browser.
+# BillFlow Linux build + packaging (Tauri 2).
+# Builds the React frontend and the Rust Tauri shell with the Tauri CLI, then
+# stages the generated AppImage/deb into packaging/dist/.
+# Runs entirely as a normal user: no sudo, no manual AppDir assembly.
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-STAGING_PARENT="$SCRIPT_DIR/packaging/staged"
-APPDIR="$STAGING_PARENT/BillFlow"
-BIN="billflow"
-ARCH="$(uname -m)"
+DIST_DIR="$SCRIPT_DIR/packaging/dist"
+BUNDLE_DIR="$ROOT_DIR/src-tauri/target/release/bundle"
+DESKTOP_SRC="$SCRIPT_DIR/packaging/BillFlow.desktop"
+ICON_SRC="$ROOT_DIR/assets/icon.png"
 
-echo "==> Building release binary (cargo build --release -p $BIN)"
-cargo build --release --manifest-path "$ROOT_DIR/Cargo.toml" -p "$BIN"
+# --- prerequisites ---------------------------------------------------------
+# Tauri needs Node/npm (frontend + CLI) and Rust (native shell). The Linux
+# WebKit2GTK/GTK3 system libraries are required to compile and run the native
+# WebView; see linux-app/README.md for the distro package names.
+for cmd in node npm cargo rustc; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "error: '$cmd' is required to build BillFlow." >&2
+    echo "       Install Node.js (LTS, includes npm) and the Rust stable toolchain (https://rustup.rs/)." >&2
+    exit 1
+  fi
+done
 
-BIN_SRC="$ROOT_DIR/target/release/$BIN"
-if [[ ! -f "$BIN_SRC" ]]; then
-  echo "error: expected binary at $BIN_SRC was not produced" >&2
+if [[ ! -f "$ROOT_DIR/package.json" ]]; then
+  echo "error: expected root package.json at $ROOT_DIR/package.json (npm scripts live there)." >&2
   exit 1
 fi
-if [[ ! -f "$ROOT_DIR/assets/icon.png" ]]; then
-  echo "error: assets/icon.png is missing (see assets/README.md)" >&2
+if [[ ! -f "$ROOT_DIR/src-tauri/tauri.conf.json" ]]; then
+  echo "error: expected Tauri config at $ROOT_DIR/src-tauri/tauri.conf.json" >&2
+  exit 1
+fi
+if [[ ! -f "$ICON_SRC" ]]; then
+  echo "error: $ICON_SRC is missing (see assets/README.md)" >&2
+  exit 1
+fi
+if [[ ! -f "$DESKTOP_SRC" ]]; then
+  echo "error: freedesktop launcher $DESKTOP_SRC is missing" >&2
   exit 1
 fi
 
-echo "==> Staging AppDir at $APPDIR"
-rm -rf "$APPDIR"
-mkdir -p "$APPDIR/usr/bin" "$APPDIR/assets"
+# --- build -----------------------------------------------------------------
+echo "==> Installing frontend dependencies (npm install)"
+( cd "$ROOT_DIR" && npm install )
 
-install -m 0755 "$BIN_SRC" "$APPDIR/usr/bin/$BIN"
-cp -R "$ROOT_DIR/assets/." "$APPDIR/assets/"
+echo "==> Building Tauri app (npm run tauri:build)"
+( cd "$ROOT_DIR" && npm run tauri:build )
 
-# AppImage metadata: the launcher and the icon must be at the AppDir root,
-# matching Exec=billflow / Icon=billflow in the .desktop file.
-cp "$SCRIPT_DIR/packaging/BillFlow.desktop" "$APPDIR/billflow.desktop"
-cp "$ROOT_DIR/assets/icon.png" "$APPDIR/billflow.png"
+# --- stage outputs ----------------------------------------------------------
+echo "==> Staging artifacts into $DIST_DIR"
+rm -rf "$DIST_DIR"
+mkdir -p "$DIST_DIR"
 
-cat > "$APPDIR/AppRun" <<'EOR'
-#!/bin/sh
-HERE="$(dirname "$(readlink -f "$0")")"
-export LD_LIBRARY_PATH="$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-exec "$HERE/usr/bin/billflow" "$@"
-EOR
-chmod +x "$APPDIR/AppRun"
+copied=0
+while IFS= read -r -d '' artifact; do
+  case "$artifact" in
+    *.AppImage) install -m 0755 "$artifact" "$DIST_DIR/" ;;
+    *)          install -m 0644 "$artifact" "$DIST_DIR/" ;;
+  esac
+  echo "    staged: $(basename -- "$artifact")"
+  copied=$((copied + 1))
+done < <(find "$BUNDLE_DIR" -type f \( -name '*.AppImage' -o -name '*.deb' \) -print0 2>/dev/null)
 
-echo "==> Packaging"
-if command -v appimagetool >/dev/null 2>&1; then
-  APPIMAGE="$SCRIPT_DIR/packaging/BillFlow-${ARCH}.AppImage"
-  echo "appimagetool found; creating $APPIMAGE"
-  appimagetool "$APPDIR" "$APPIMAGE"
-  echo "AppImage ready: $APPIMAGE"
-  echo "Run it with: chmod +x '$APPIMAGE' && '$APPIMAGE'"
-else
-  # Fallback: a plain portable bundle. appimagetool is a standalone download;
-  # nothing is installed here, so this path needs no privileges either.
-  echo "appimagetool not found on PATH - falling back to a portable tar.gz bundle."
-  echo "To get an AppImage, put appimagetool on PATH and re-run this script."
-  TARBALL="$SCRIPT_DIR/packaging/BillFlow-portable-${ARCH}.tar.gz"
-  tar -czf "$TARBALL" -C "$STAGING_PARENT" BillFlow
-  echo "Portable bundle ready: $TARBALL"
-  echo "Run it with: tar -xzf '$TARBALL' && ./BillFlow/AppRun"
+if [[ "$copied" -eq 0 ]]; then
+  echo "error: no AppImage or .deb found under $BUNDLE_DIR" >&2
+  echo "       expected output in $BUNDLE_DIR/appimage/ or $BUNDLE_DIR/deb/" >&2
+  exit 1
 fi
 
-echo "==> Done. Staged files remain in: $APPDIR"
+# Keep the freedesktop launcher and icon alongside the packages for anyone who
+# wants a manual desktop-menu entry. BillFlow.desktop remains desktop-file-validate
+# compliant (Exec=billflow, Icon=billflow).
+cp "$DESKTOP_SRC" "$DIST_DIR/BillFlow.desktop"
+cp "$ICON_SRC" "$DIST_DIR/billflow.png"
+
+echo "==> Done. BillFlow packages are in: $DIST_DIR"
+ls -1 "$DIST_DIR"
+echo "    (The .desktop launcher and billflow.png icon are for optional manual installation.)"

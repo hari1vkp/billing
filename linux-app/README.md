@@ -1,61 +1,48 @@
 # BillFlow for Linux
 
-Build the native Linux desktop application. This is a Rust/eframe binary with
-an embedded SQLite database — **no Node.js, Python, browser or web server is
-needed at build time or at runtime**.
+Builds the Tauri 2 desktop app: a thin Rust shell around the **existing React
+frontend** (`frontend/`, reused unchanged). Tauri uses the system WebKit2GTK
+WebView, so no Chromium/Node/Python runtime is bundled or needed at run time.
 
 ## Prerequisites
 
-- Rust stable toolchain (`rustup` + `cargo`)
-- A C compiler and `pkg-config`
-- X11 development headers: `libx11-dev`
-- Keyboard handling headers: `libxkbcommon-dev`
+- Node.js LTS + npm, and the Rust stable toolchain (`rustup` + `cargo`)
+- Linux WebView build dependencies: WebKit2GTK 4.1 and GTK3 development libraries
 
-On Debian/Ubuntu (installation itself may need root, but the build does not):
+On Debian/Ubuntu (installation may need root; the build does not):
 
 ```bash
-sudo apt install build-essential pkg-config libx11-dev libxkbcommon-dev
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+  librsvg2-dev build-essential pkg-config curl wget file
 ```
 
-On Fedora: `sudo dnf install gcc pkgconf-pkg-config libX11-devel libxkbcommon-devel`.
-On Arch: `sudo pacman -S base-devel pkgconf libx11 libxkbcommon`.
+Fedora: `webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel`
+Arch: `webkit2gtk-4.1 gtk3 libayatana-appindicator librsvg`
 
 ## Build
 
 From the repository root:
 
 ```bash
-cargo build --release -p billflow
+npm install
+npm run tauri:build
 ```
 
-The release binary is written to `target/release/billflow`. Run it directly:
+Or run `./build.sh` from this directory — it checks prerequisites, runs both
+commands and stages the result. No sudo is needed.
 
-```bash
-./target/release/billflow
-```
+## Outputs
 
-Or, during development, `cargo run -p billflow`.
+Tauri writes bundles to `src-tauri/target/release/bundle/` (`appimage/` and
+`deb/`). `build.sh` copies the produced `.AppImage` and `.deb` into
+`linux-app/packaging/dist/`, together with the freedesktop launcher
+(`BillFlow.desktop`) and icon (`billflow.png`) for optional manual installation.
 
-On a Wayland session the binary uses its X11 backend through XWayland; no
-extra flags are normally required.
+During development use `npm run tauri:dev` from the repository root.
 
-## Data location
+## Data locations
 
-All application state lives in one SQLite file:
+- Local SQLite (offline/native operations): `~/.local/share/billflow/billflow.sqlite3`
+- Backend URL setting: `~/.local/share/billflow/settings.json`
 
-```
-~/.local/share/billflow/billflow.sqlite3
-```
-
-The directory is created automatically on first launch. Deleting that file
-resets the app to a fresh demo business. On first run, sign in with
-`demo@billingapp.com` / `Demo@1234`.
-
-## Packaging
-
-Use `./build.sh` from this directory to build the binary, stage it together
-with `assets/`, and produce either an AppImage (when `appimagetool` is on
-`PATH`) or a portable `tar.gz` bundle. No sudo is required.
-
-See [packaging/README.md](packaging/README.md) for the output formats and
-runtime library requirements.
+See [packaging/README.md](packaging/README.md) for details.

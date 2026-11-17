@@ -1,8 +1,24 @@
 import type { LoginResponse, QueryValue } from '../types';
+import { getBackendUrl, isTauri } from '../tauri';
 
 const BASE_URL = '/api/v1';
+const DEFAULT_TAURI_BASE_URL = 'http://127.0.0.1:8000/api/v1';
 const ACCESS_KEY = 'bf_access_token';
 const REFRESH_KEY = 'bf_refresh_token';
+
+/**
+ * Resolve the API base exactly once: the relative `/api/v1` in the browser, or
+ * the configured absolute URL from the Tauri host (with a safe default).
+ */
+let apiBasePromise: Promise<string> | null = null;
+
+function getApiBase(): Promise<string> {
+  if (!isTauri()) return Promise.resolve(BASE_URL);
+  if (apiBasePromise === null) {
+    apiBasePromise = getBackendUrl().catch(() => DEFAULT_TAURI_BASE_URL);
+  }
+  return apiBasePromise;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -69,7 +85,7 @@ async function refreshTokens(): Promise<boolean> {
 
   refreshInFlight = (async () => {
     try {
-      const response = await fetch(`${BASE_URL}/auth/refresh`, {
+      const response = await fetch(`${await getApiBase()}/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: refreshToken }),
@@ -107,7 +123,7 @@ async function fetchWithAuth(
   init: RequestInit = {},
   allowRefresh = true,
 ): Promise<Response> {
-  let response = await fetch(`${BASE_URL}${path}`, {
+  let response = await fetch(`${await getApiBase()}${path}`, {
     ...init,
     headers: authHeaders(init),
   });
@@ -115,7 +131,7 @@ async function fetchWithAuth(
   if (response.status === 401 && allowRefresh && !isAuthPath(path)) {
     const refreshed = await refreshTokens();
     if (refreshed) {
-      response = await fetch(`${BASE_URL}${path}`, {
+      response = await fetch(`${await getApiBase()}${path}`, {
         ...init,
         headers: authHeaders(init),
       });
@@ -213,11 +229,11 @@ export async function downloadFile(path: string, filename: string): Promise<void
 /** Unauthenticated calls used by the public payment link page. */
 export const publicApi = {
   get: async <T>(path: string): Promise<T> => {
-    const response = await fetch(`${BASE_URL}${path}`, { method: 'GET' });
+    const response = await fetch(`${await getApiBase()}${path}`, { method: 'GET' });
     return parseResponse<T>(response);
   },
   post: async <T>(path: string, body?: unknown): Promise<T> => {
-    const response = await fetch(`${BASE_URL}${path}`, {
+    const response = await fetch(`${await getApiBase()}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),

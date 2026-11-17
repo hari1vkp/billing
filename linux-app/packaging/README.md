@@ -1,61 +1,34 @@
 # Linux packaging
 
-`linux-app/build.sh` builds the native binary with
-`cargo build --release -p billflow`, then stages this layout under
-`linux-app/packaging/staged/BillFlow/`:
+`linux-app/build.sh` checks prerequisites, runs `npm install` and
+`npm run tauri:build` from the repository root, then copies Tauri's output into
+`linux-app/packaging/dist/`:
 
 ```
-BillFlow/
-  AppRun                      # launcher used by the bundle / AppImage
-  billflow.desktop            # freedesktop launcher (Exec=billflow, Icon=billflow)
-  billflow.png                # 256x256 icon from assets/icon.png
-  assets/                     # source icon assets
-  usr/bin/billflow            # release binary
+dist/
+  BillFlow-<arch>.AppImage   # from src-tauri/target/release/bundle/appimage/
+  billflow_<version>_<arch>.deb  # from src-tauri/target/release/bundle/deb/
+  BillFlow.desktop           # freedesktop launcher (Exec=billflow, Icon=billflow)
+  billflow.png               # icon from assets/icon.png
 ```
 
-The script is non-interactive, needs no sudo, and does not install anything
-system-wide.
-
-## Two output options
-
-### 1. AppImage (preferred)
-
-If `appimagetool` is on `PATH`, the script produces
-`linux-app/packaging/BillFlow-<arch>.AppImage`. It is a single self-contained
-file: make it executable and run it.
+The `.desktop` file is kept `desktop-file-validate` compliant and is optional —
+copy it and the icon into `~/.local/share/applications/` and the icon theme for
+a manual desktop-menu entry. Run the AppImage directly:
 
 ```bash
 chmod +x BillFlow-x86_64.AppImage
 ./BillFlow-x86_64.AppImage
 ```
 
-`appimagetool` is a standalone download, not an installed package. If FUSE is
-unavailable on the target machine, run
-`./BillFlow-x86_64.AppImage --appimage-extract-and-run`.
+If FUSE is unavailable: `./BillFlow-x86_64.AppImage --appimage-extract-and-run`.
+The `.deb` can be installed with a package manager (installation may need root;
+building does not).
 
-### 2. Portable `tar.gz` bundle (fallback)
+## Runtime dependencies
 
-When `appimagetool` is not on `PATH`, the script writes
-`linux-app/packaging/BillFlow-portable-<arch>.tar.gz` instead. Extract it and
-run the `AppRun` launcher (or `usr/bin/billflow` directly):
-
-```bash
-tar -xzf BillFlow-portable-x86_64.tar.gz
-./BillFlow/AppRun
-```
-
-The `.desktop` file in `linux-app/packaging/BillFlow.desktop` can also be
-copied to `~/.local/share/applications/` for a desktop-menu entry; it expects
-`billflow` on `PATH` or a matching icon install.
-
-## Minimal runtime dependencies
-
-The Rust binary itself is self-contained apart from the system C library:
-
-- glibc (a recent Linux distribution)
-- X11 client libraries (`libX11`, `libXcursor`, `libXrandr`, `libXi`) for the
-  eframe `x11` backend, or XWayland on a Wayland session
-- `libxkbcommon` for keyboard handling
-
-No Node.js, Python, browser, web server or database server is required at
-runtime. Application data is stored in `~/.local/share/billflow/billflow.sqlite3`.
+Tauri uses the native WebKit2GTK WebView: no Chromium/Node/Python is bundled.
+The target machine needs WebKit2GTK 4.1, GTK3, libayatana-appindicator and
+librsvg (see [../README.md](../README.md) for package names). Application data
+is stored locally in `~/.local/share/billflow/billflow.sqlite3`, with the backend
+URL in `settings.json`.

@@ -38,6 +38,10 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
+        # Tauri 2 desktop WebView origins — required so the packaged app can
+        # call the FastAPI backend from the native WebView.
+        "http://tauri.localhost",
+        "tauri://localhost",
     ]
 
     @property

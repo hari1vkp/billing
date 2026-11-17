@@ -1,0 +1,16 @@
+{
+  "name": "billflow-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BillFlow Tauri desktop shell — delegates web assets to frontend/",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev -- --host 0.0.0.0",
+    "build": "npm --prefix frontend run build",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.5"
+  }
+}

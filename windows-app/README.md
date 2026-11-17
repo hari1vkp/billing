@@ -1,48 +1,42 @@
 # BillFlow for Windows
 
-Build the native Windows desktop application. It is a Rust/eframe executable
-with an embedded SQLite database — **no Node.js, Python, browser or web server
-is needed at build time or at runtime**.
+Builds the Tauri 2 desktop app: a thin Rust shell around the **existing React
+frontend** (`frontend/`, reused unchanged). Tauri uses the system WebView2
+control, so no Chromium/Node/Python runtime is bundled or installed.
 
 ## Prerequisites
 
-- Windows 10 or 11 (64-bit)
-- Rust stable toolchain via [rustup](https://rustup.rs/) (includes `cargo` and
-  the MSVC linker via the Visual Studio Build Tools "C++ build tools" workload)
+- Windows 10 or 11 (64-bit) with the WebView2 Runtime (bundled in Windows 11;
+  install the Evergreen runtime on Windows 10 if missing)
+- Node.js LTS + npm, and the Rust stable toolchain via
+  [rustup](https://rustup.rs/) with the Visual Studio "C++ build tools" workload
+  (MSVC linker)
 
-No Node.js, Python, browser, PostgreSQL or Docker is required.
+No administrator rights are needed to build or package.
 
 ## Build
 
 From a terminal at the repository root:
 
 ```powershell
-cargo build --release -p billflow
+npm install
+npm run tauri:build
 ```
 
-The executable is written to `target\release\billflow.exe`. Copy that file and
-the `assets` folder anywhere and run it — it is fully portable.
+Or run `.\build.ps1` from PowerShell in this directory — it checks prerequisites,
+runs both commands and stages the result.
 
-During development you can use `cargo run -p billflow`.
+## Outputs
 
-## Data location
+Tauri writes bundles to `src-tauri\target\release\bundle\` (`nsis\` and `msi\`).
+`build.ps1` copies the NSIS `.exe` installer and/or `.msi` into
+`windows-app\packaging\dist\`. The NSIS installer is per-user and needs no admin.
 
-Application state is a single SQLite file:
+During development use `npm run tauri:dev` from the repository root.
 
-```
-%APPDATA%\BillFlow\billflow.sqlite3
-```
+## Data locations
 
-The directory is created on first launch. Deleting the file resets the app to
-a fresh demo business. On first run, sign in with
-`demo@billingapp.com` / `Demo@1234`.
+- Local SQLite (offline/native operations): `%APPDATA%\BillFlow\billflow.sqlite3`
+- Backend URL setting: `%APPDATA%\BillFlow\settings.json`
 
-## Packaging
-
-Run `.\build.ps1` from PowerShell in this directory. It builds the release
-binary, stages it with `assets\icon.ico` under
-`windows-app\packaging\staged\BillFlow\`, and always produces a portable ZIP.
-If the Inno Setup compiler (`iscc`) is on `PATH`, it additionally builds a
-setup executable. The script does not require administrator rights.
-
-See [packaging/README.md](packaging/README.md) for the two output formats.
+See [packaging/README.md](packaging/README.md) for details.
