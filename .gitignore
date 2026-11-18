@@ -23,3 +23,6 @@ postgres_data/
 
 # Rust
 /target/
+
+# Python test caches
+.pytest_cache/
