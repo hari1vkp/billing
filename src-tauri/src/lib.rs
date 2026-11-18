@@ -54,6 +54,8 @@ pub fn run() {
             commands::backup::backup_database,
             commands::backup::restore_database,
             commands::export::save_export_bytes,
+            commands::imports::import_products_csv,
+            commands::imports::import_template_csv,
             commands::print::print_file,
             commands::local_db::local_db_status,
         ])

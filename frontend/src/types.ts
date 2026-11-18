@@ -525,3 +525,81 @@ export interface PosCheckoutResponse {
   payment: Payment;
   receipt: PosReceipt;
 }
+
+/* ------------------------------------------------------------------ */
+/* Product import (owner onboarding)                                   */
+/* ------------------------------------------------------------------ */
+
+/** One editable row returned by the file / photo parser. */
+export interface ProductImportRow {
+  row_number: number;
+  name: string;
+  barcode: string | null;
+  cost_price: number | null;
+  selling_price: number | null;
+  quantity: number;
+  category: string | null;
+  gst_rate: number;
+  errors: string[];
+  warnings: string[];
+  valid: boolean;
+}
+
+/** Response from `POST /products/import/parse`. */
+export interface ProductImportParseResponse {
+  recognized_columns: Record<string, string | null>;
+  unsupported_columns: string[];
+  total_rows: number;
+  error_count: number;
+  rows: ProductImportRow[];
+}
+
+/** A row accepted by `POST /products/import/commit`. */
+export interface ProductImportCommitRow {
+  name: string;
+  barcode?: string | null;
+  cost_price?: number | null;
+  selling_price: number;
+  quantity: number;
+  category?: string | null;
+  gst_rate?: number;
+}
+
+/** Response from `POST /products/import/commit`. */
+export interface ProductImportCommitResponse {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: Array<{ row: number; message: string }>;
+  stock_movements: number;
+  activity_entries: number;
+}
+
+/** One candidate row returned by the photo / PDF reader. */
+export interface ProductOcrRow {
+  name: string;
+  quantity: number | null;
+  confidence: number;
+  uncertain_fields: string[];
+  raw_line: string;
+}
+
+/** Response from `POST /products/import/ocr`. */
+export interface ProductOcrResponse {
+  rows: ProductOcrRow[];
+  source: string;
+  warnings: string[];
+}
+
+/** Response from `GET /products/barcode/lookup/{barcode}`. */
+export interface BarcodeLookupResponse {
+  found: boolean;
+  source: string;
+  barcode: string;
+  name?: string;
+  brand?: string;
+  category?: string;
+  image_url?: string;
+  price: null;
+  message: string;
+}

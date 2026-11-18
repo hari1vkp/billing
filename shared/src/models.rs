@@ -314,3 +314,27 @@ pub struct InvoiceDetail {
     pub items: Vec<InvoiceItem>,
     pub payments: Vec<Payment>,
 }
+
+/// One staged product row from a CSV import file.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ImportRow {
+    pub name: String,
+    pub barcode: Option<String>,
+    pub cost_price: Option<f64>,
+    pub selling_price: f64,
+    pub quantity: f64,
+    pub category: Option<String>,
+    pub gst_rate: Option<f64>,
+}
+
+/// Outcome of one atomic product import batch.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ImportSummary {
+    pub created: i64,
+    pub updated: i64,
+    pub skipped: i64,
+    /// `(1-based row number, message)` for every invalid row.
+    pub errors: Vec<(usize, String)>,
+    pub stock_movements: i64,
+    pub activity_entries: i64,
+}

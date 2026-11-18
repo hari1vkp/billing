@@ -6,6 +6,7 @@ from app.api import (
     auth,
     business,
     customers,
+    imports,
     inventory,
     invoices,
     payments,
@@ -21,6 +22,10 @@ api_router = APIRouter(prefix=settings.API_PREFIX)
 api_router.include_router(auth.router)
 api_router.include_router(business.router)
 api_router.include_router(customers.router)
+# Static import/barcode paths must be registered before /products/{product_id}
+# so they are never shadowed by the dynamic product routes.
+api_router.include_router(imports.router)
+api_router.include_router(imports.barcode_router)
 api_router.include_router(products.router)
 api_router.include_router(invoices.router)
 api_router.include_router(payments.router)

@@ -5,5 +5,6 @@ pub mod app;
 pub mod backend;
 pub mod backup;
 pub mod export;
+pub mod imports;
 pub mod local_db;
 pub mod print;

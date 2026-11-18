@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { AlertTriangle, Boxes, Package, SlidersHorizontal, X } from 'lucide-react';
+import { AlertTriangle, Boxes, Package, SlidersHorizontal, Upload, X } from 'lucide-react';
 import { api } from '../api/client';
 import {
   Badge,
@@ -18,6 +18,7 @@ import {
   useToast,
 } from '../components/UI';
 import { Products } from './Products';
+import { ImportProducts } from './ImportProducts';
 import type { Paginated, Product, StockMovement } from '../types';
 
 const PAGE_SIZE = 15;
@@ -46,6 +47,7 @@ export function Inventory() {
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ total: 0, pages: 1, page_size: PAGE_SIZE });
   const [loading, setLoading] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [adjustForm, setAdjustForm] = useState({
     product_id: '',
@@ -56,16 +58,18 @@ export function Inventory() {
   });
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const result = await api.get<Paginated<Product>>('/products', { page_size: 200 });
-        setProducts(result.items);
-      } catch {
-        // Adjustment picker will stay empty if products cannot be loaded.
-      }
-    })();
+  const loadProducts = useCallback(async () => {
+    try {
+      const result = await api.get<Paginated<Product>>('/products', { page_size: 200 });
+      setProducts(result.items);
+    } catch {
+      // Adjustment picker will stay empty if products cannot be loaded.
+    }
   }, []);
+
+  useEffect(() => {
+    void loadProducts();
+  }, [loadProducts]);
 
   const loadMovements = useCallback(async () => {
     setLoading(true);
@@ -141,9 +145,14 @@ export function Inventory() {
         title="Inventory"
         subtitle="Products, stock levels and every adjustment in one place"
         actions={
-          <Button icon={<SlidersHorizontal size={16} />} onClick={openAdjust}>
-            Adjust stock
-          </Button>
+          <>
+            <Button variant="secondary" icon={<Upload size={16} />} onClick={() => setImportOpen(true)}>
+              Import Products
+            </Button>
+            <Button icon={<SlidersHorizontal size={16} />} onClick={openAdjust}>
+              Adjust stock
+            </Button>
+          </>
         }
       />
 
@@ -270,6 +279,19 @@ export function Inventory() {
           </Card>
         </>
       )}
+
+      <Modal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Import products"
+        subtitle="Add products from a file, barcode, photo or by hand."
+        size="xl"
+      >
+        <ImportProducts
+          onClose={() => setImportOpen(false)}
+          onImported={() => { void loadProducts(); }}
+        />
+      </Modal>
 
       <Modal
         open={adjustOpen}
