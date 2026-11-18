@@ -4,6 +4,7 @@ import {
   LockKeyhole,
   Save,
   ShieldCheck,
+  Sparkles,
   Trash2,
   UserPlus,
   Users,
@@ -30,6 +31,7 @@ import {
   titleCase,
 } from '../components/UI';
 import type { AppUser, Business, BusinessUpdate, MessageResponse } from '../types';
+import { AICatalogue } from './AICatalogue';
 
 export function Settings() {
   const { user, business, setBusiness } = useAuth();
@@ -48,6 +50,7 @@ export function Settings() {
   const [removing, setRemoving] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [changingPassword, setChangingPassword] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   useEffect(() => {
     if (business) {
@@ -305,6 +308,23 @@ export function Settings() {
 
       <Card>
         <CardHeader
+          title="Product catalogue"
+          subtitle="Build your product list with a little help from AI"
+          action={
+            <Button size="sm" variant="secondary" icon={<Sparkles size={15} />}
+              onClick={() => setAiOpen(true)}>
+              Set up your product catalogue with AI
+            </Button>
+          }
+        />
+        <p className="import-intro">
+          Answer a few questions, copy a ready-made prompt into your own AI assistant, then upload the
+          file it gives you. BillFlow checks every row before adding anything.
+        </p>
+      </Card>
+
+      <Card>
+        <CardHeader
           title="Team members"
           subtitle="Manage who has access to this workspace"
           action={isOwner ? (
@@ -443,6 +463,8 @@ export function Settings() {
         danger
         loading={removing}
       />
+
+      <AICatalogue open={aiOpen} onClose={() => setAiOpen(false)} />
     </>
   );
 }

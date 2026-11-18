@@ -189,6 +189,10 @@ pub struct Customer {
     pub updated_at: String,
 }
 
+fn default_discount_type() -> String {
+    "none".to_string()
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Product {
     pub id: String,
@@ -204,6 +208,13 @@ pub struct Product {
     pub track_inventory: bool,
     pub is_service: bool,
     pub low_stock_threshold: f64,
+    /// Product-level discount kind (`none`, `percent` or `flat`).
+    /// Defaults to `"none"` so older payloads stay deserializable.
+    #[serde(default = "default_discount_type")]
+    pub discount_type: String,
+    /// Product-level discount amount (percent or flat), default `0`.
+    #[serde(default)]
+    pub discount_value: f64,
     pub is_active: bool,
     pub created_at: String,
     pub updated_at: String,

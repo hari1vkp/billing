@@ -295,5 +295,30 @@ pub fn migrate(conn: &Connection) -> Result<()> {
     if !has_confirmed_by {
         conn.execute_batch("ALTER TABLE payments ADD COLUMN confirmed_by TEXT;")?;
     }
+
+    // Additive upgrade: product-level discounts. Only add the two columns when
+    // they are absent so existing rows (and repeated migrations) are untouched.
+    let mut stmt = conn.prepare("PRAGMA table_info(products)")?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    let mut has_discount_type = false;
+    let mut has_discount_value = false;
+    for name in rows {
+        match name?.as_str() {
+            "discount_type" => has_discount_type = true,
+            "discount_value" => has_discount_value = true,
+            _ => {}
+        }
+    }
+    drop(stmt);
+    if !has_discount_type {
+        conn.execute_batch(
+            "ALTER TABLE products ADD COLUMN discount_type TEXT NOT NULL DEFAULT 'none';",
+        )?;
+    }
+    if !has_discount_value {
+        conn.execute_batch(
+            "ALTER TABLE products ADD COLUMN discount_value REAL NOT NULL DEFAULT 0;",
+        )?;
+    }
     Ok(())
 }

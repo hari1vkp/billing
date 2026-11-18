@@ -17,6 +17,8 @@ class ProductBase(BaseModel):
     track_inventory: bool = True
     is_service: bool = False
     low_stock_threshold: float = Field(default=10, ge=0)
+    discount_type: str = Field(default="none", max_length=16)
+    discount_value: float = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def services_have_no_inventory(self) -> "ProductBase":
@@ -42,6 +44,8 @@ class ProductUpdate(BaseModel):
     track_inventory: bool | None = None
     is_service: bool | None = None
     low_stock_threshold: float | None = Field(default=None, ge=0)
+    discount_type: str | None = Field(default=None, max_length=16)
+    discount_value: float | None = Field(default=None, ge=0)
     is_active: bool | None = None
 
 
@@ -59,6 +63,8 @@ class ProductOut(ORMModel):
     track_inventory: bool
     is_service: bool
     low_stock_threshold: float
+    discount_type: str
+    discount_value: float
     is_active: bool
     created_at: datetime
     updated_at: datetime

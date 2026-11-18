@@ -28,7 +28,7 @@ import {
 } from '../api/client';
 import { getBackendUrl, isTauri } from '../tauri';
 import { useAuth } from '../context/AuthContext';
-import { Badge, Button, Checkbox, Field, Input, Loader, useToast } from '../components/UI';
+import { Badge, Button, Checkbox, Field, Input, Loader, Select, useToast } from '../components/UI';
 import type {
   BarcodeLookupResponse,
   Product,
@@ -196,26 +196,49 @@ function productFormFields(
 interface EditableRow {
   row_number: number;
   name: string;
+  brand: string;
+  category: string;
+  subcategory: string;
+  variant: string;
+  size_pack: string;
   barcode: string;
+  barcode_type: string;
+  sku: string;
   cost_price: string;
   selling_price: string;
+  discount_type: string;
+  discount_value: string;
   quantity: string;
-  category: string;
   gst_rate: number;
   errors: string[];
   warnings: string[];
   valid: boolean;
 }
 
+type EditableTextField = Exclude<
+  keyof EditableRow,
+  'row_number' | 'gst_rate' | 'errors' | 'warnings' | 'valid'
+>;
+
+const DISCOUNT_TYPES = ['none', 'percent', 'flat'];
+
 function toEditable(row: ProductImportParseResponse['rows'][number]): EditableRow {
   return {
     row_number: row.row_number,
     name: row.name ?? '',
-    barcode: row.barcode ?? '',
-    cost_price: row.cost_price === null ? '' : String(row.cost_price),
-    selling_price: row.selling_price === null ? '' : String(row.selling_price),
-    quantity: row.quantity === null || row.quantity === undefined ? '' : String(row.quantity),
+    brand: row.brand ?? '',
     category: row.category ?? '',
+    subcategory: row.subcategory ?? '',
+    variant: row.variant ?? '',
+    size_pack: row.size_pack ?? '',
+    barcode: row.barcode ?? '',
+    barcode_type: row.barcode_type ?? '',
+    sku: row.sku ?? '',
+    cost_price: row.cost_price === null || row.cost_price === undefined ? '' : String(row.cost_price),
+    selling_price: row.selling_price === null || row.selling_price === undefined ? '' : String(row.selling_price),
+    discount_type: row.discount_type ?? 'none',
+    discount_value: row.discount_value === null || row.discount_value === undefined ? '' : String(row.discount_value),
+    quantity: row.quantity === null || row.quantity === undefined ? '' : String(row.quantity),
     gst_rate: row.gst_rate,
     errors: row.errors ?? [],
     warnings: row.warnings ?? [],
@@ -232,6 +255,15 @@ function revalidate(row: EditableRow): EditableRow {
   }
   if (row.quantity.trim() !== '' && Number(row.quantity) < 0) {
     errors.push('Quantity cannot be negative.');
+  }
+  const discount = row.discount_value.trim();
+  if (discount !== '') {
+    const value = Number(discount);
+    if (!Number.isFinite(value) || value < 0) {
+      errors.push('Discount value cannot be negative.');
+    } else if (row.discount_type === 'percent' && value > 100) {
+      errors.push('A percentage discount cannot be more than 100.');
+    }
   }
   return { ...row, errors, valid: errors.length === 0 };
 }
@@ -293,11 +325,19 @@ function BulkImport({ onImported }: { onImported: () => void }) {
     setSummary(null);
     const commitRows: ProductImportCommitRow[] = validRows.map((row) => ({
       name: row.name.trim(),
+      brand: row.brand.trim() || undefined,
+      category: row.category.trim() || undefined,
+      subcategory: row.subcategory.trim() || undefined,
+      variant: row.variant.trim() || undefined,
+      size_pack: row.size_pack.trim() || undefined,
       barcode: row.barcode.trim() || undefined,
+      barcode_type: row.barcode_type.trim() || undefined,
+      sku: row.sku.trim() || undefined,
       cost_price: row.cost_price.trim() !== '' ? Number(row.cost_price) : undefined,
       selling_price: Number(row.selling_price),
+      discount_type: row.discount_type || 'none',
+      discount_value: row.discount_value.trim() !== '' ? Number(row.discount_value) : undefined,
       quantity: row.quantity.trim() !== '' ? Number(row.quantity) : 0,
-      category: row.category.trim() || undefined,
       gst_rate: row.gst_rate,
     }));
     try {
@@ -313,6 +353,28 @@ function BulkImport({ onImported }: { onImported: () => void }) {
     } finally {
       setCommitting(false);
     }
+  }
+
+  function cell(
+    index: number,
+    row: EditableRow,
+    field: EditableTextField,
+    label: string,
+    options: { className?: string; type?: 'text' | 'number'; min?: string; step?: string } = {},
+  ) {
+    return (
+      <td>
+        <Input
+          className={`import-cell-input ${options.className ?? ''}`}
+          type={options.type ?? 'text'}
+          min={options.min}
+          step={options.step}
+          value={row[field]}
+          aria-label={`${label} for row ${row.row_number}`}
+          onChange={(event) => updateRow(index, field, event.target.value)}
+        />
+      </td>
+    );
   }
 
   const validCount = rows.filter((row) => row.valid).length;
@@ -352,11 +414,19 @@ function BulkImport({ onImported }: { onImported: () => void }) {
                   <tr>
                     <th>Row</th>
                     <th>Name</th>
+                    <th>Brand</th>
+                    <th>Category</th>
+                    <th>Subcategory</th>
+                    <th>Variant</th>
+                    <th>Size / Pack</th>
                     <th>Barcode</th>
+                    <th>Barcode type</th>
+                    <th>SKU</th>
                     <th>Cost</th>
                     <th>Selling price</th>
+                    <th>Discount type</th>
+                    <th>Discount value</th>
                     <th>Qty</th>
-                    <th>Category</th>
                     <th>Status</th>
                     <th aria-label="Remove" />
                   </tr>
@@ -366,36 +436,31 @@ function BulkImport({ onImported }: { onImported: () => void }) {
                     <tr key={`${row.row_number}-${index}`}
                       className={row.valid ? '' : 'import-row--invalid'}>
                       <td className="mono small">{row.row_number}</td>
+                      {cell(index, row, 'name', 'Name', { className: 'import-cell-input--name' })}
+                      {cell(index, row, 'brand', 'Brand')}
+                      {cell(index, row, 'category', 'Category')}
+                      {cell(index, row, 'subcategory', 'Subcategory')}
+                      {cell(index, row, 'variant', 'Variant')}
+                      {cell(index, row, 'size_pack', 'Size / Pack')}
+                      {cell(index, row, 'barcode', 'Barcode')}
+                      {cell(index, row, 'barcode_type', 'Barcode type')}
+                      {cell(index, row, 'sku', 'SKU')}
+                      {cell(index, row, 'cost_price', 'Cost', { type: 'number', min: '0', step: '0.01' })}
+                      {cell(index, row, 'selling_price', 'Selling price', { type: 'number', min: '0', step: '0.01' })}
                       <td>
-                        <Input className="import-cell-input import-cell-input--name" value={row.name}
-                          aria-label={`Name for row ${row.row_number}`}
-                          onChange={(event) => updateRow(index, 'name', event.target.value)} />
+                        <Select className="import-cell-input import-cell-select" value={row.discount_type}
+                          aria-label={`Discount type for row ${row.row_number}`}
+                          onChange={(event) => updateRow(index, 'discount_type', event.target.value)}>
+                          {!DISCOUNT_TYPES.includes(row.discount_type) && (
+                            <option value={row.discount_type}>{row.discount_type}</option>
+                          )}
+                          <option value="none">None</option>
+                          <option value="percent">Percent</option>
+                          <option value="flat">Flat</option>
+                        </Select>
                       </td>
-                      <td>
-                        <Input className="import-cell-input" value={row.barcode}
-                          aria-label={`Barcode for row ${row.row_number}`}
-                          onChange={(event) => updateRow(index, 'barcode', event.target.value)} />
-                      </td>
-                      <td>
-                        <Input className="import-cell-input" type="number" min="0" step="0.01"
-                          value={row.cost_price} aria-label={`Cost for row ${row.row_number}`}
-                          onChange={(event) => updateRow(index, 'cost_price', event.target.value)} />
-                      </td>
-                      <td>
-                        <Input className="import-cell-input" type="number" min="0" step="0.01"
-                          value={row.selling_price} aria-label={`Selling price for row ${row.row_number}`}
-                          onChange={(event) => updateRow(index, 'selling_price', event.target.value)} />
-                      </td>
-                      <td>
-                        <Input className="import-cell-input import-cell-input--qty" type="number" min="0" step="1"
-                          value={row.quantity} aria-label={`Quantity for row ${row.row_number}`}
-                          onChange={(event) => updateRow(index, 'quantity', event.target.value)} />
-                      </td>
-                      <td>
-                        <Input className="import-cell-input" value={row.category}
-                          aria-label={`Category for row ${row.row_number}`}
-                          onChange={(event) => updateRow(index, 'category', event.target.value)} />
-                      </td>
+                      {cell(index, row, 'discount_value', 'Discount value', { type: 'number', min: '0', step: '0.01' })}
+                      {cell(index, row, 'quantity', 'Quantity', { type: 'number', min: '0', step: '1', className: 'import-cell-input--qty' })}
                       <td>
                         <Badge tone={row.valid ? 'success' : 'danger'} dot>
                           {row.valid ? 'Ready' : 'Needs fixing'}

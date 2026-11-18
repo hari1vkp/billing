@@ -26,6 +26,8 @@ api_router.include_router(customers.router)
 # so they are never shadowed by the dynamic product routes.
 api_router.include_router(imports.router)
 api_router.include_router(imports.barcode_router)
+api_router.include_router(imports.ai_router)
+api_router.include_router(imports.labels_router)
 api_router.include_router(products.router)
 api_router.include_router(invoices.router)
 api_router.include_router(payments.router)

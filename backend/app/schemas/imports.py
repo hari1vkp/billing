@@ -1,9 +1,9 @@
 """Pydantic models for the beginner-friendly product onboarding API.
 
-These mirror the shapes documented in IMPORT_CONTRACT.md. They are deliberately
-lenient about optional values: the parser/commit service performs the actual
-validation so that individual bad rows can be reported instead of rejecting a
-whole upload.
+These mirror the shapes documented in AI_CATALOGUE_CONTRACT.md. They are
+deliberately lenient about optional values: the parser/commit service performs
+the actual validation so that individual bad rows can be reported instead of
+rejecting a whole upload.
 """
 
 from pydantic import BaseModel, Field
@@ -13,11 +13,19 @@ class ImportRowInput(BaseModel):
     """A single row sent by the client to the commit endpoint."""
 
     name: str
+    brand: str | None = None
+    category: str | None = None
+    subcategory: str | None = None
+    variant: str | None = None
+    size_pack: str | None = None
     barcode: str | None = None
+    barcode_type: str | None = None
+    sku: str | None = None
     cost_price: float | None = None
     selling_price: float
+    discount_type: str | None = None
+    discount_value: float | None = None
     quantity: float = 0
-    category: str | None = None
     gst_rate: float | None = None
 
 
@@ -26,11 +34,19 @@ class ImportPreviewRow(BaseModel):
 
     row_number: int
     name: str
+    brand: str | None = None
+    category: str | None = None
+    subcategory: str | None = None
+    variant: str | None = None
+    size_pack: str | None = None
     barcode: str | None = None
+    barcode_type: str | None = None
+    sku: str | None = None
     cost_price: float | None = None
     selling_price: float | None = None
+    discount_type: str = "none"
+    discount_value: float = 0
     quantity: float = 0
-    category: str | None = None
     gst_rate: float
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -90,3 +106,26 @@ class BarcodeLookupResponse(BaseModel):
     # The catalogue has no reliable pricing data; this is always null.
     price: None = None
     message: str
+
+
+# --- AI-assisted catalogue onboarding -------------------------------------
+
+
+class AICategory(BaseModel):
+    id: str
+    label: str
+    description: str
+
+
+class AICategoriesResponse(BaseModel):
+    categories: list[AICategory]
+
+
+class AIPromptRequest(BaseModel):
+    category_id: str
+    business_name: str | None = None
+    extra_notes: str | None = None
+
+
+class AIPromptResponse(BaseModel):
+    prompt: str

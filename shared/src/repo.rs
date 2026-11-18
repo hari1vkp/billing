@@ -80,6 +80,8 @@ fn product_from_row(row: &Row<'_>) -> rusqlite::Result<Product> {
         track_inventory: rb(row, "track_inventory")?,
         is_service: rb(row, "is_service")?,
         low_stock_threshold: row.get("low_stock_threshold")?,
+        discount_type: rs(row, "discount_type")?,
+        discount_value: row.get("discount_value")?,
         is_active: rb(row, "is_active")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,

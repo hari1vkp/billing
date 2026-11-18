@@ -37,6 +37,22 @@ def run_migrations(engine: Engine) -> None:
             if "barcode" not in columns:
                 logger.info("Migration: adding products.barcode")
                 conn.execute(text("ALTER TABLE products ADD COLUMN barcode VARCHAR(64)"))
+            if "discount_type" not in columns:
+                logger.info("Migration: adding products.discount_type")
+                conn.execute(
+                    text(
+                        "ALTER TABLE products ADD COLUMN discount_type "
+                        "VARCHAR(16) DEFAULT 'none'"
+                    )
+                )
+            if "discount_value" not in columns:
+                logger.info("Migration: adding products.discount_value")
+                conn.execute(
+                    text(
+                        "ALTER TABLE products ADD COLUMN discount_value "
+                        "NUMERIC(14,2) DEFAULT 0"
+                    )
+                )
             # create_all only creates this index when it creates the table; for
             # a pre-existing products table we create it explicitly here.
             conn.execute(

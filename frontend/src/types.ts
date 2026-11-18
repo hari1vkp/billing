@@ -543,6 +543,15 @@ export interface ProductImportRow {
   errors: string[];
   warnings: string[];
   valid: boolean;
+  /* Extended 14-column template fields (optional for legacy files). */
+  brand?: string | null;
+  subcategory?: string | null;
+  variant?: string | null;
+  size_pack?: string | null;
+  barcode_type?: string | null;
+  sku?: string | null;
+  discount_type?: string | null;
+  discount_value?: number | null;
 }
 
 /** Response from `POST /products/import/parse`. */
@@ -563,6 +572,15 @@ export interface ProductImportCommitRow {
   quantity: number;
   category?: string | null;
   gst_rate?: number;
+  /* Extended 14-column template fields. */
+  brand?: string | null;
+  subcategory?: string | null;
+  variant?: string | null;
+  size_pack?: string | null;
+  barcode_type?: string | null;
+  sku?: string | null;
+  discount_type?: string | null;
+  discount_value?: number | null;
 }
 
 /** Response from `POST /products/import/commit`. */
@@ -602,4 +620,32 @@ export interface BarcodeLookupResponse {
   image_url?: string;
   price: null;
   message: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* AI-assisted catalogue onboarding (guided, external-AI workflow)     */
+/* ------------------------------------------------------------------ */
+
+/** One selectable business type from `GET /products/ai/categories`. */
+export interface AICategory {
+  id: string;
+  label: string;
+  description: string;
+}
+
+/** Response from `GET /products/ai/categories`. */
+export interface AICategoriesResponse {
+  categories: AICategory[];
+}
+
+/** Request body for `POST /products/ai/prompt`. */
+export interface AIPromptRequest {
+  category_id: string;
+  business_name?: string;
+  extra_notes?: string;
+}
+
+/** Response from `POST /products/ai/prompt`. */
+export interface AIPromptResponse {
+  prompt: string;
 }

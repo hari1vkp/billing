@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { AlertTriangle, Boxes, Package, SlidersHorizontal, Upload, X } from 'lucide-react';
-import { api } from '../api/client';
+import { AlertTriangle, Boxes, Package, Printer, SlidersHorizontal, Sparkles, Upload, X } from 'lucide-react';
+import { api, downloadFile } from '../api/client';
 import {
   Badge,
   Button,
@@ -19,6 +19,7 @@ import {
 } from '../components/UI';
 import { Products } from './Products';
 import { ImportProducts } from './ImportProducts';
+import { AICatalogue } from './AICatalogue';
 import type { Paginated, Product, StockMovement } from '../types';
 
 const PAGE_SIZE = 15;
@@ -48,6 +49,8 @@ export function Inventory() {
   const [meta, setMeta] = useState({ total: 0, pages: 1, page_size: PAGE_SIZE });
   const [loading, setLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [printingLabels, setPrintingLabels] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [adjustForm, setAdjustForm] = useState({
     product_id: '',
@@ -95,6 +98,25 @@ export function Inventory() {
   useEffect(() => {
     if (tab === 'movements') void loadMovements();
   }, [tab, loadMovements]);
+
+  async function printBarcodeLabels() {
+    const ids = products.map((product) => product.id).filter(Boolean);
+    if (!ids.length) {
+      toast.error('Add some products before printing barcode labels.');
+      return;
+    }
+    setPrintingLabels(true);
+    try {
+      await downloadFile(
+        `/products/barcodes/labels?ids=${encodeURIComponent(ids.join(','))}`,
+        'billflow-barcode-labels.pdf',
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not print barcode labels.');
+    } finally {
+      setPrintingLabels(false);
+    }
+  }
 
   function openAdjust() {
     setAdjustForm({
@@ -146,8 +168,15 @@ export function Inventory() {
         subtitle="Products, stock levels and every adjustment in one place"
         actions={
           <>
+            <Button variant="secondary" icon={<Sparkles size={16} />} onClick={() => setAiOpen(true)}>
+              Create Products with AI
+            </Button>
             <Button variant="secondary" icon={<Upload size={16} />} onClick={() => setImportOpen(true)}>
               Import Products
+            </Button>
+            <Button variant="secondary" icon={<Printer size={16} />} loading={printingLabels}
+              onClick={() => void printBarcodeLabels()}>
+              Print barcode labels
             </Button>
             <Button icon={<SlidersHorizontal size={16} />} onClick={openAdjust}>
               Adjust stock
@@ -292,6 +321,12 @@ export function Inventory() {
           onImported={() => { void loadProducts(); }}
         />
       </Modal>
+
+      <AICatalogue
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        onImported={() => { void loadProducts(); }}
+      />
 
       <Modal
         open={adjustOpen}

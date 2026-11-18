@@ -305,6 +305,8 @@ mod tests {
             track_inventory: true,
             is_service: false,
             low_stock_threshold: 10.0,
+            discount_type: "none".into(),
+            discount_value: 0.0,
             is_active: true,
             created_at: String::new(),
             updated_at: String::new(),

@@ -11,6 +11,7 @@ import csv
 import io
 import logging
 import re
+import secrets
 import subprocess
 from urllib.parse import quote
 
@@ -20,6 +21,7 @@ from sqlalchemy import func, select
 from app.models.product import Product
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.services import audit_service, inventory_service, product_service
+from app.services.ai_catalogue_service import CATALOGUE_HEADER
 
 logger = logging.getLogger(__name__)
 
@@ -31,24 +33,96 @@ OCR_UNAVAILABLE_MESSAGE = (
 # (see IMPORT_CONTRACT.md).
 COLUMN_ALIASES: dict[str, list[str]] = {
     "name": ["name", "product", "product name", "item", "item name", "description"],
+    "brand": ["brand", "brand name", "make", "manufacturer", "company"],
+    "category": ["category", "group", "product group", "product category", "department"],
+    "subcategory": ["subcategory", "sub category", "sub-category", "sub group", "section"],
+    "variant": ["variant", "variation", "colour", "color", "shade", "flavour", "flavor", "model"],
+    "size_pack": [
+        "size / pack size", "size", "pack size", "pack", "size pack", "unit", "volume"
+    ],
     "barcode": ["barcode", "bar code", "ean", "upc", "isbn"],
+    "barcode_type": ["barcode type", "bar code type", "code type", "barcode kind"],
+    "sku": ["sku", "product code", "item code", "style code", "article no", "article number"],
     "cost_price": ["cost", "cost price", "purchase price", "buying price", "mrp cost"],
     "selling_price": [
         "price", "selling price", "sale price", "retail price", "rate", "mrp"
     ],
+    "discount_type": ["discount type", "discount kind"],
+    "discount_value": ["discount value", "discount", "discount %", "disc value"],
     "quantity": [
         "quantity", "qty", "stock", "opening stock", "opening qty", "closing stock"
     ],
-    "category": ["category", "group", "product group", "brand"],
+    # Optional legacy column: defaults from the business settings when absent.
     "gst_rate": ["gst", "gst %", "tax", "tax rate"],
 }
 
+# Canonical JSON keys. gst_rate is recognised but is not part of the official
+# 14-column template header (it remains optional and is defaulted).
 CANONICAL_COLUMNS = [
-    "name", "barcode", "cost_price", "selling_price", "quantity", "category", "gst_rate"
+    "name",
+    "brand",
+    "category",
+    "subcategory",
+    "variant",
+    "size_pack",
+    "barcode",
+    "barcode_type",
+    "sku",
+    "cost_price",
+    "selling_price",
+    "discount_type",
+    "discount_value",
+    "quantity",
+    "gst_rate",
 ]
 
-TEMPLATE_HEADER = ",".join(CANONICAL_COLUMNS)
-TEMPLATE_EXAMPLE = "#Example product (remove the #),8901234567890,50,120,10,Beverages,18"
+TEMPLATE_HEADER = CATALOGUE_HEADER
+TEMPLATE_INSTRUCTIONS = [
+    "# Fill one product per row. Leave any cell completely blank when you do not know "
+    "its value - never guess a barcode or a price.",
+    "# Barcode: type a genuine printed barcode only if you can see it; otherwise leave "
+    "it blank and use Barcode Type 'internal'. Discount Type: none | percent | flat.",
+]
+TEMPLATE_EXAMPLE_ROWS = [
+    [
+        "Amul Butter",
+        "Amul",
+        "Dairy",
+        "Butter",
+        "Unsalted",
+        "500 g",
+        "8901234567890",
+        "manufacturer",
+        "AMUL-BTR-500",
+        "210",
+        "245",
+        "none",
+        "",
+        "10",
+    ],
+    [
+        "Cotton T-Shirt",
+        "Roadster",
+        "Clothing",
+        "T-Shirts",
+        "Round Neck / Blue",
+        "M",
+        "",
+        "internal",
+        "TSHIRT-BLU-M",
+        "250",
+        "599",
+        "percent",
+        "10",
+        "5",
+    ],
+]
+
+DISCOUNT_TYPES = {"none", "percent", "flat"}
+_MANUFACTURER_TYPES = {
+    "manufacturer", "manufacturers", "gs1", "ean", "upc", "printed", "external"
+}
+_INTERNAL_TYPES = {"internal", "generated", "billflow", "own"}
 
 
 class ParseError(Exception):
@@ -109,13 +183,126 @@ def _cell_text(value) -> str:
     return str(value).strip()
 
 
+def _normalize_discount_type(raw) -> tuple[str, bool]:
+    """Return (canonical value, is_recognised). Blank means 'none'."""
+    text = (
+        _cell_text(raw)
+        .lower()
+        .replace("_", " ")
+        .replace("-", " ")
+        .replace("%", " percent")
+    )
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return "none", True
+    synonyms = {
+        "no discount": "none",
+        "nodiscount": "none",
+        "zero": "none",
+        "percentage": "percent",
+        "pct": "percent",
+        "percent off": "percent",
+        "flat amount": "flat",
+        "rupees": "flat",
+        "rs": "flat",
+    }
+    text = synonyms.get(text, text.replace(" ", ""))
+    return text, text in DISCOUNT_TYPES
+
+
+def _normalize_barcode_type(raw) -> str | None:
+    text = _cell_text(raw).lower().replace("_", " ").replace("-", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return None
+    if text in _MANUFACTURER_TYPES:
+        return "manufacturer"
+    if text in _INTERNAL_TYPES:
+        return "internal"
+    return text
+
+
+def _validate_discount(raw_type, raw_value, errors: list[str]) -> tuple[str, float]:
+    discount_type, recognized = _normalize_discount_type(raw_type)
+    if not recognized:
+        errors.append("Discount type must be one of: none, percent, flat")
+        discount_type = "none"
+
+    value, ok, provided = _number(raw_value)
+    if provided and not ok:
+        errors.append("Discount value must be a number")
+    if value is not None:
+        if value < 0:
+            errors.append("Discount value cannot be negative")
+        elif discount_type == "percent" and value > 100:
+            errors.append("Discount value cannot exceed 100 for percent discounts")
+    if not provided or not ok or value is None:
+        value = 0.0
+    return discount_type, float(value)
+
+
+def _decorate_name(name: str, variant, size_pack) -> str:
+    """Separate variant rows with the contract's `Base — Variant / Size` form."""
+    parts = [part for part in (_cell_text(variant), _cell_text(size_pack)) if part]
+    if not parts:
+        return name
+    return f"{name} — {' / '.join(parts)}"
+
+
+def _build_description(values: dict) -> str | None:
+    """Encode extra catalogue metadata in the existing description column."""
+    parts: list[str] = []
+    for key, label in (
+        ("brand", "Brand"),
+        ("category", "Category"),
+        ("subcategory", "Subcategory"),
+        ("variant", "Variant"),
+        ("size_pack", "Size"),
+        ("barcode_type", "Barcode Type"),
+    ):
+        value = _cell_text(values.get(key))
+        if value:
+            parts.append(f"{label}: {value}")
+    return " | ".join(parts) or None
+
+
+def _generate_internal_barcode(
+    db, business_id: str, used_barcodes: set[str], used_skus: set[str]
+) -> tuple[str, str]:
+    """Return a unique Code-128-compatible internal barcode and SKU."""
+    for _ in range(100):
+        barcode = "BF" + f"{secrets.randbelow(10_000_000_000):010d}"
+        sku = f"SKU-{barcode}"
+        if barcode in used_barcodes or sku in used_skus:
+            continue
+        taken = db.execute(
+            select(Product.id).where(
+                Product.business_id == business_id,
+                (Product.barcode == barcode) | (Product.sku == sku),
+            )
+        ).first()
+        if taken:
+            continue
+        used_barcodes.add(barcode)
+        used_skus.add(sku)
+        return barcode, sku
+    raise RuntimeError("Could not generate a unique internal barcode")
+
+
 # ---------------------------------------------------------------------------
 # Template
 # ---------------------------------------------------------------------------
 
 def template_csv() -> bytes:
-    """Return the downloadable CSV template as UTF-8 bytes."""
-    return (TEMPLATE_HEADER + "\n" + TEMPLATE_EXAMPLE + "\n").encode("utf-8")
+    """Return the official 14-column CSV template as UTF-8 bytes."""
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow(CATALOGUE_HEADER.split(","))
+    for instruction in TEMPLATE_INSTRUCTIONS:
+        writer.writerow([instruction] + [""] * (len(CANONICAL_COLUMNS) - 2))
+    for example in TEMPLATE_EXAMPLE_ROWS:
+        writer.writerow(example)
+    return output.getvalue().encode("utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -246,11 +433,26 @@ def parse_file(
         if not gst_provided:
             gst = float(base_gst)
 
+        discount_type, discount_value = _validate_discount(
+            cell("discount_type"), cell("discount_value"), errors
+        )
+        raw_barcode_type = _normalize_barcode_type(cell("barcode_type"))
+        if raw_barcode_type and raw_barcode_type not in {
+            "manufacturer", "internal"
+        }:
+            warnings.append(
+                f"Unknown barcode type '{raw_barcode_type}'; it will be treated "
+                "as a manufacturer barcode"
+            )
+
         barcode = _normalize_barcode(cell("barcode"))
         if barcode:
             first_row = seen_barcodes.get(barcode)
             if first_row is not None:
-                warnings.append(
+                # A barcode can only belong to one product. Surface this as an
+                # error so the owner can fix it in the editable preview instead
+                # of having the row silently skipped at commit time.
+                errors.append(
                     f"Duplicate barcode '{barcode}' also appears on row {first_row}"
                 )
             else:
@@ -267,16 +469,23 @@ def parse_file(
                         f"'{existing.name}' (id {existing.id})"
                     )
 
-        category = cell("category") or None
         rows.append(
             {
                 "row_number": row_number,
                 "name": name_value,
+                "brand": cell("brand") or None,
+                "category": cell("category") or None,
+                "subcategory": cell("subcategory") or None,
+                "variant": cell("variant") or None,
+                "size_pack": cell("size_pack") or None,
                 "barcode": barcode,
+                "barcode_type": raw_barcode_type,
+                "sku": cell("sku") or None,
                 "cost_price": cost if cost_provided and cost_ok else None,
                 "selling_price": selling if selling_ok and selling_provided else None,
+                "discount_type": discount_type,
+                "discount_value": discount_value,
                 "quantity": quantity if quantity_ok and quantity is not None else 0,
-                "category": category,
                 "gst_rate": gst if gst_ok and gst is not None else float(base_gst),
                 "errors": errors,
                 "warnings": warnings,
@@ -343,15 +552,37 @@ def _validated_values(row, default_gst_rate: float) -> tuple[dict | None, str | 
         return None, "GST rate must be between 0 and 100"
 
     barcode = _normalize_barcode(_get(row, "barcode"))
-    category = str(_get(row, "category", "") or "").strip() or None
+    barcode_type = _normalize_barcode_type(_get(row, "barcode_type"))
+    if barcode_type not in {"manufacturer", "internal"}:
+        # A real printed barcode is always a manufacturer barcode; internal is
+        # reserved for barcodes generated by BillFlow.
+        barcode_type = "manufacturer" if barcode else None
+
+    errors: list[str] = []
+    discount_type, discount_value = _validate_discount(
+        _get(row, "discount_type"), _get(row, "discount_value"), errors
+    )
+    if errors:
+        return None, errors[0]
 
     return {
-        "name": name,
+        "name": _decorate_name(
+            name, _get(row, "variant"), _get(row, "size_pack")
+        ),
+        "base_name": name,
+        "brand": _cell_text(_get(row, "brand")) or None,
+        "category": _cell_text(_get(row, "category")) or None,
+        "subcategory": _cell_text(_get(row, "subcategory")) or None,
+        "variant": _cell_text(_get(row, "variant")) or None,
+        "size_pack": _cell_text(_get(row, "size_pack")) or None,
         "barcode": barcode,
+        "barcode_type": barcode_type,
+        "sku": _cell_text(_get(row, "sku")) or None,
         "cost_price": cost if cost_provided else None,
         "selling_price": selling,
+        "discount_type": discount_type,
+        "discount_value": discount_value,
         "quantity": quantity,
-        "category": category,
         "gst_rate": gst,
     }, None
 
@@ -410,6 +641,11 @@ def commit_rows(
     gst_default = (
         float(default_gst_rate) if default_gst_rate is not None else 18.0
     )
+    # Barcodes/SKUs generated in this batch must not collide with each other or
+    # with anything already present in the tenant.
+    used_barcodes: set[str] = set()
+    used_skus: set[str] = set()
+    seen_explicit_barcodes: dict[str, int] = {}
 
     try:
         for offset, row in enumerate(rows):
@@ -419,6 +655,24 @@ def commit_rows(
                 result["errors"].append({"row": row_number, "message": error})
                 result["skipped"] += 1
                 continue
+
+            explicit_barcode = values["barcode"]
+            if explicit_barcode:
+                first_row = seen_explicit_barcodes.get(explicit_barcode)
+                if first_row is not None:
+                    result["errors"].append(
+                        {
+                            "row": row_number,
+                            "message": (
+                                f"Duplicate barcode '{explicit_barcode}' also appears "
+                                f"on row {first_row}; skipped"
+                            ),
+                        }
+                    )
+                    result["skipped"] += 1
+                    continue
+                seen_explicit_barcodes[explicit_barcode] = row_number
+                used_barcodes.add(explicit_barcode)
 
             existing, match_error = _find_existing(db, business_id, values)
             if match_error:
@@ -436,7 +690,12 @@ def commit_rows(
                     db,
                     business_id,
                     existing.id,
-                    ProductUpdate(stock=values["quantity"]),
+                    ProductUpdate(
+                        stock=values["quantity"],
+                        price=values["selling_price"],
+                        discount_type=values["discount_type"],
+                        discount_value=values["discount_value"],
+                    ),
                     user_id,
                 )
                 after_stock = float(updated.stock)
@@ -447,15 +706,50 @@ def commit_rows(
                 continue
 
             # New product: opening stock is the imported quantity.
+            barcode = values["barcode"]
+            sku = values["sku"]
+            sku_generated = False
+            if barcode:
+                # Manufacturer barcode: preserve it exactly as supplied.
+                values["barcode_type"] = "manufacturer"
+                if not sku:
+                    sku = barcode
+            else:
+                barcode, generated_sku = _generate_internal_barcode(
+                    db, business_id, used_barcodes, used_skus
+                )
+                values["barcode_type"] = "internal"
+                if not sku:
+                    sku = generated_sku
+                    sku_generated = True
+            # sku is capped at 50 chars while barcodes allow 64.
+            sku = sku[:50] if sku else None
+            if sku:
+                if (sku in used_skus and not sku_generated) or db.execute(
+                    select(Product.id).where(
+                        Product.business_id == business_id, Product.sku == sku
+                    )
+                ).first():
+                    result["errors"].append(
+                        {
+                            "row": row_number,
+                            "message": f"SKU '{sku}' is already used by another product",
+                        }
+                    )
+                    result["skipped"] += 1
+                    continue
+                used_skus.add(sku)
+
             data = ProductCreate(
                 name=values["name"],
-                # sku is capped at 50 chars while barcodes allow 64.
-                sku=values["barcode"][:50] if values["barcode"] else None,
-                barcode=values["barcode"],
-                description=values["category"],
+                sku=sku,
+                barcode=barcode,
+                description=_build_description(values),
                 price=values["selling_price"],
                 gst_rate=values["gst_rate"],
                 stock=values["quantity"],
+                discount_type=values["discount_type"],
+                discount_value=values["discount_value"],
                 track_inventory=True,
                 is_service=False,
             )
@@ -520,6 +814,90 @@ def commit_rows(
         raise
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Barcode label sheets
+# ---------------------------------------------------------------------------
+
+def _barcode_marker(product: Product) -> str:
+    """Distinguish owner-printed manufacturer codes from BillFlow internal ones."""
+    description = (product.description or "").lower()
+    if "barcode type: internal" in description:
+        return "INTERNAL"
+    if (product.barcode or "").startswith("BF") and (product.sku or "").startswith(
+        "SKU-BF"
+    ):
+        return "INTERNAL"
+    return "MANUFACTURER"
+
+
+def _label_text(value, max_length: int = 60) -> str:
+    """Keep product text renderable with reportlab's built-in Helvetica font."""
+    text = str(value or "").encode("latin-1", "replace").decode("latin-1")
+    return text[:max_length]
+
+
+def barcode_labels_pdf(products: list[Product]) -> bytes:
+    """Build a printable Code 128 label sheet for the given products."""
+    from reportlab.graphics.barcode.code128 import Code128
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    pdf.setTitle("BillFlow product barcode labels")
+    page_width, page_height = A4
+    left_margin = 34.0
+    columns = 2
+    label_width = (page_width - 2 * left_margin) / columns
+    label_height = 124.0
+    top = page_height - left_margin
+    y = top - label_height
+    column = 0
+
+    for product in products:
+        if y < left_margin:
+            pdf.showPage()
+            y = top - label_height
+            column = 0
+        x = left_margin + column * label_width
+
+        pdf.setLineWidth(0.6)
+        pdf.roundRect(
+            x, y, label_width - 8, label_height - 8, 4, stroke=1, fill=0
+        )
+        pdf.setFont("Helvetica-Bold", 10)
+        pdf.drawString(x + 10, y + label_height - 24, _label_text(product.name, 42))
+        pdf.setFont("Helvetica", 8)
+        pdf.drawString(
+            x + 10,
+            y + label_height - 38,
+            f"SKU: {_label_text(product.sku or '-', 32)}",
+        )
+
+        value = str(product.barcode or product.sku or product.id)
+        try:
+            symbol = Code128(value, barHeight=34, barWidth=0.6)
+            symbol.drawOn(pdf, x + 10, y + 42)
+        except Exception:  # an unexpected value must not break the whole sheet
+            pdf.setFont("Helvetica", 8)
+            pdf.drawString(x + 10, y + 52, _label_text(value, 40))
+
+        pdf.setFont("Helvetica", 9)
+        pdf.drawCentredString(x + label_width / 2 - 4, y + 31, _label_text(value, 34))
+        pdf.setFont("Helvetica-Bold", 8)
+        pdf.drawCentredString(
+            x + label_width / 2 - 4, y + 16, _barcode_marker(product)
+        )
+
+        column += 1
+        if column >= columns:
+            column = 0
+            y -= label_height
+
+    pdf.save()
+    return buffer.getvalue()
 
 
 # ---------------------------------------------------------------------------

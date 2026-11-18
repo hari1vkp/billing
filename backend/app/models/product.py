@@ -25,4 +25,10 @@ class Product(BaseModel):
     low_stock_threshold: Mapped[float] = mapped_column(
         Numeric(14, 3), default=10.0, nullable=False
     )
+    discount_type: Mapped[str] = mapped_column(
+        String(16), default="none", nullable=False
+    )
+    discount_value: Mapped[float] = mapped_column(
+        Numeric(14, 2), default=0.0, nullable=False
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
