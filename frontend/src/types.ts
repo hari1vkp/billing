@@ -860,3 +860,47 @@ export interface SupplierPurchaseConversion {
   skipped_custom_items?: number;
   total_amount?: number;
 }
+
+/* ------------------------------------------------------------------ */
+/* Barcode sticker studio (owner-only, additive)                        */
+/* ------------------------------------------------------------------ */
+
+/** Backend sticker presets; `custom` uses the caller's mm dimensions. */
+export type StickerSize = 'small' | 'medium' | 'large' | 'xl' | 'custom';
+
+/** `sheet` places many stickers on A4; `individual` prints one per page. */
+export type StickerLayout = 'sheet' | 'individual';
+
+/** One line of a preview / PDF request. */
+export interface BarcodeStickerItemInput {
+  product_id: string;
+  quantity: number;
+}
+
+/** Body of `POST /barcode-stickers/preview` and `POST /barcode-stickers/pdf`. */
+export interface BarcodeStickerPayload {
+  items: BarcodeStickerItemInput[];
+  size: StickerSize;
+  width_mm?: number;
+  height_mm?: number;
+  layout: StickerLayout;
+}
+
+/** One sticker line resolved by the backend (barcode already ensured). */
+export interface BarcodeStickerPreviewItem {
+  product_id: string;
+  name: string;
+  barcode: string;
+  quantity: number;
+}
+
+/** Response from `POST /barcode-stickers/preview`. */
+export interface BarcodeStickerPreviewResponse {
+  svg: string;
+  total_stickers: number;
+  pages: number;
+  width_mm: number;
+  height_mm: number;
+  layout: StickerLayout;
+  items: BarcodeStickerPreviewItem[];
+}

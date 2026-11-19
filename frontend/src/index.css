@@ -5104,3 +5104,371 @@ input[type='number'],
   min-height: 82px;
   padding: 10px;
 }
+
+/* ---------- barcode sticker studio (additive) ----------------------- */
+.sticker-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.sticker-total {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sticker-total strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sticker-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.sticker-toolbar__search {
+  position: relative;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.sticker-toolbar__search > svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+.sticker-toolbar__search .input {
+  width: 100%;
+  padding-left: 34px;
+}
+.sticker-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sticker-product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 10px;
+}
+.sticker-product-card {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 76px;
+  grid-template-areas:
+    'check main qty'
+    'check barcode qty';
+  align-items: center;
+  gap: 2px 10px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: border-color 0.12s, background 0.12s;
+}
+.sticker-product-card:hover {
+  background: var(--canvas);
+}
+.sticker-product-card--selected {
+  border-color: var(--primary);
+}
+.sticker-product-check {
+  grid-area: check;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.sticker-product-check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.sticker-product-main {
+  grid-area: main;
+  min-width: 0;
+}
+.sticker-product-name {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sticker-product-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sticker-product-barcode {
+  grid-area: barcode;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sticker-product-nobarcode {
+  color: var(--muted);
+}
+.sticker-qty {
+  grid-area: qty;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  cursor: pointer;
+}
+.sticker-qty__label {
+  font-size: 11px;
+  color: var(--muted);
+}
+.sticker-qty__input {
+  width: 62px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 6px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.sticker-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 18px;
+  align-items: start;
+}
+.sticker-field-label {
+  margin: 4px 0 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.sticker-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sticker-option {
+  flex: 1 1 120px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+.sticker-option:hover {
+  background: var(--canvas);
+}
+.sticker-option--active {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.sticker-option__label {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.sticker-option__dim {
+  font-size: 11px;
+  color: var(--muted);
+}
+.sticker-option--active .sticker-option__dim {
+  color: var(--muted);
+}
+
+.sticker-custom-dims {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.sticker-custom-dim {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.sticker-custom-dim .input {
+  width: 100%;
+}
+
+.sticker-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.sticker-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.sticker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.sticker-preview-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  overflow: auto;
+}
+.sticker-preview-svg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+.sticker-preview-svg svg {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  background: var(--surface);
+}
+.sticker-preview-placeholder {
+  max-width: 260px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.sticker-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+.sticker-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+.sticker-summary__stat {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.sticker-summary__stat-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.sticker-summary__stat-value {
+  display: block;
+  margin-top: 3px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.sticker-summary__items {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.sticker-summary-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.sticker-summary-item:last-child {
+  border-bottom: 0;
+}
+.sticker-summary-item__info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sticker-summary-item__name {
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sticker-summary-item__barcode {
+  margin-top: 2px;
+  color: var(--muted);
+}
+.sticker-summary-item__qty {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+@media (max-width: 1000px) {
+  .sticker-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .sticker-product-card {
+    grid-template-columns: 16px minmax(0, 1fr);
+    grid-template-areas:
+      'check main'
+      'check barcode'
+      'check qty';
+  }
+  .sticker-qty {
+    justify-self: start;
+  }
+  .sticker-total {
+    white-space: normal;
+  }
+}

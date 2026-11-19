@@ -4,6 +4,7 @@ from app.api import (
     activity,
     analytics,
     auth,
+    barcode_stickers,
     business,
     customers,
     imports,
@@ -29,6 +30,8 @@ api_router.include_router(imports.router)
 api_router.include_router(imports.barcode_router)
 api_router.include_router(imports.ai_router)
 api_router.include_router(imports.labels_router)
+# Static sticker paths are registered before catch-all product routes.
+api_router.include_router(barcode_stickers.router)
 # Supplier routes are registered before the product CRUD routes. They have
 # their own /suppliers prefix so they are never shadowed by product paths.
 api_router.include_router(suppliers.router)
