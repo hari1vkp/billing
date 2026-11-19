@@ -283,7 +283,7 @@ class VisitOut(ORMModel):
 
 
 class SupplierDetail(SupplierOut):
-    products: list[SupplierProductOut] = []
+    products: list[SupplierProductCardOut] = []
     reminder_lists: list[ReminderListOut] = []
     visits: list[VisitOut] = []
 

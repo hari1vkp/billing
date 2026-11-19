@@ -253,6 +253,29 @@ def run_migrations(engine: Engine) -> None:
             if table in table_names:
                 conn.execute(text(statement))
 
+        # One-time data backfill: older links were created with only a
+        # product_id, so the supplier SKU column was empty. Fill it from the
+        # linked product's SKU (or barcode) WITHOUT overwriting entered values
+        # and WITHOUT touching supplier price (the owner sets that per supplier).
+        product_columns = {
+            column["name"] for column in inspector.get_columns("products")
+        } if "products" in table_names else set()
+        if (
+            {"supplier_products", "products"}.issubset(table_names)
+            and {"sku", "barcode"}.issubset(product_columns)
+        ):
+            conn.execute(
+                text(
+                    "UPDATE supplier_products SET supplier_sku = COALESCE("
+                    "(SELECT NULLIF(sku, '') FROM products "
+                    " WHERE products.id = supplier_products.product_id), "
+                    "(SELECT NULLIF(barcode, '') FROM products "
+                    " WHERE products.id = supplier_products.product_id)) "
+                    "WHERE (supplier_sku IS NULL OR supplier_sku = '') "
+                    "AND product_id IS NOT NULL"
+                )
+            )
+
         # StockMovement.reason is a plain VARCHAR(50); no schema change is needed
         # for the new "purchase" reason. Conversion uses the existing receiving
         # path (inventory_service.record_movement), which accepts any reason.

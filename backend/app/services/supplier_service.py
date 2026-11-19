@@ -256,8 +256,10 @@ def get_supplier_detail(db: Session, business_id: str, supplier_id: str):
 
     supplier = _get_supplier(db, business_id, supplier_id)
     detail = SupplierDetail.model_validate(supplier)
+    # Use the enriched card DTO so the profile's Products tab can show the real
+    # product name, brand/category, variant/size and unit — not just a bare id.
     detail.products = [
-        supplier_product_out(link)
+        supplier_product_card_out(db, link)
         for link in list_supplier_products(db, business_id, supplier_id)
     ]
     detail.reminder_lists = [

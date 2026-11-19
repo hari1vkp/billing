@@ -278,9 +278,16 @@ function SupplierForm({
         );
       }
     }
+    const productById = new Map(catalog.map((product) => [product.id, product]));
     for (const productId of selectedIds) {
       if (!previousIds.includes(productId)) {
-        await api.post(`/suppliers/${supplierId}/products`, { product_id: productId });
+        const product = productById.get(productId);
+        // SKU comes from the linked store product; supplier price is intentionally
+        // left for the owner to set per supplier in the Products tab.
+        await api.post(`/suppliers/${supplierId}/products`, {
+          product_id: productId,
+          supplier_sku: product?.sku || product?.barcode || undefined,
+        });
       }
     }
   }
@@ -587,17 +594,21 @@ function ProductsTab({
               {links.map((link) => (
                 <tr key={link.id}>
                   <td data-label="Item">
-                    <strong>{link.product_name || link.custom_name || '—'}</strong>
+                    <strong>{link.product_name || link.custom_name || link.product_sku || '—'}</strong>
                     <small className="cell-sub">
                       {link.product_id
-                        ? 'Existing BillFlow product'
+                        ? `Existing BillFlow product${link.product_sku ? ` · ${link.product_sku}` : ''}`
                         : 'Custom name — not in inventory'}
                     </small>
                     {link.notes && <small className="cell-sub">{link.notes}</small>}
                   </td>
-                  <td data-label="Supplier SKU" className="mono">{link.supplier_sku || '—'}</td>
+                  <td data-label="Supplier SKU" className="mono">
+                    {link.supplier_sku || link.product_sku || 'Not set'}
+                  </td>
                   <td data-label="Supplier price" className="text-right">
-                    {link.supplier_price != null ? money(link.supplier_price, currency) : '—'}
+                    {link.supplier_price != null
+                      ? money(link.supplier_price, currency)
+                      : 'Not set — click edit to add'}
                   </td>
                   <td data-label="Actions" className="supplier-row-actions">
                     <button type="button" className="icon-btn" aria-label="Edit product link"
