@@ -90,6 +90,20 @@ const CheckoutModalWithMode = CheckoutModal as ComponentType<
   ComponentProps<typeof CheckoutModal> & { pricingMode?: PricingMode }
 >;
 
+/** Reset a React-controlled field that a scanner typed into by mistake. */
+function clearEditableValue(target: HTMLElement | null) {
+  if (!target) return;
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    const prototype =
+      target instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+    setter?.call(target, '');
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+
 export function POS() {
   const { business } = useAuth();
   const currency = business?.currency ?? 'INR';
@@ -113,6 +127,12 @@ export function POS() {
 
   const barcodeRef = useRef<HTMLInputElement>(null);
   const customerRef = useRef<HTMLDivElement>(null);
+  // Keyboard-wedge scanners send characters much faster than a human types.
+  const scannerBufferRef = useRef('');
+  const scannerLastKeyRef = useRef(0);
+  const scanQueueRef = useRef<string[]>([]);
+  const scanningRef = useRef(false);
+  const submitBarcodeRef = useRef<(code: string) => void>(() => undefined);
 
   /* ---------------------------- focus behaviour --------------------------- */
 
@@ -135,6 +155,8 @@ export function POS() {
       setCustomerName('Walk-in Customer');
       setCustomerQuery('');
       setBarcodeValue('');
+      scanQueueRef.current = [];
+      scannerBufferRef.current = '';
       barcodeRef.current?.focus();
     };
     window.addEventListener('billflow:new-bill', resetBill);
@@ -145,29 +167,55 @@ export function POS() {
     function onGlobalKey(event: KeyboardEvent) {
       if (event.key === 'F2') {
         event.preventDefault();
-        barcodeRef.current?.focus();
+        window.requestAnimationFrame(() => barcodeRef.current?.focus());
+        scannerBufferRef.current = '';
         return;
       }
+      if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
+
       const target = event.target as HTMLElement | null;
-      const tag = target?.tagName;
-      const editable =
-        tag === 'INPUT' ||
-        tag === 'TEXTAREA' ||
-        tag === 'SELECT' ||
-        Boolean(target?.isContentEditable);
-      // Keyboard-wedge scanners type into whatever has focus; make sure that is us.
-      if (
-        !editable &&
-        event.key.length === 1 &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey
-      ) {
-        barcodeRef.current?.focus();
+      const isBarcode = target === barcodeRef.current;
+      if (isBarcode) {
+        // The input's own handler deals with the Enter suffix.
+        scannerBufferRef.current = '';
+        return;
+      }
+
+      const now = performance.now();
+      const fast = now - scannerLastKeyRef.current < 40;
+      scannerLastKeyRef.current = now;
+
+      if (event.key === 'Enter') {
+        const buffered = scannerBufferRef.current.trim();
+        scannerBufferRef.current = '';
+        if (buffered.length >= 5) {
+          // This was a scanner burst, not ordinary typing: consume the Enter so
+          // it cannot submit a form or click a focused button.
+          event.preventDefault();
+          event.stopPropagation();
+          clearEditableValue(target);
+          submitBarcodeRef.current(buffered);
+          window.requestAnimationFrame(() => barcodeRef.current?.focus());
+        }
+        return;
+      }
+
+      if (event.key.length !== 1) return;
+      if (fast) {
+        scannerBufferRef.current += event.key;
+        if (scannerBufferRef.current.length >= 5) {
+          // Once recognised as a scanner, swallow its characters and remove
+          // any prefix that already landed in another field.
+          event.preventDefault();
+          clearEditableValue(target);
+        }
+      } else {
+        scannerBufferRef.current = event.key;
       }
     }
-    window.addEventListener('keydown', onGlobalKey);
-    return () => window.removeEventListener('keydown', onGlobalKey);
+    // Capture first: scanner data must be consumed before React/native handlers.
+    window.addEventListener('keydown', onGlobalKey, true);
+    return () => window.removeEventListener('keydown', onGlobalKey, true);
   }, []);
 
   useEffect(() => {
@@ -234,20 +282,22 @@ export function POS() {
     });
   }, []);
 
-  async function onBarcodeKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    const code = barcodeValue.trim();
-    if (!code || scanning) return;
+  // Process scans one at a time. A scanner can send the next barcode while the
+  // previous lookup is still in flight; queuing prevents lost or interleaved
+  // additions without ever reading stale React state.
+  const processScanQueue = useCallback(async function processScanQueue() {
+    if (scanningRef.current) return;
+    const code = scanQueueRef.current.shift();
+    if (!code) return;
+
+    scanningRef.current = true;
     setScanning(true);
     try {
       const product = await api.get<Product>(
         `/products/barcode/${encodeURIComponent(code)}`,
       );
       addToCart(product);
-      setBarcodeValue('');
       toast.success(`${product.name} added to bill`);
-      barcodeRef.current?.focus();
     } catch (error) {
       const notFound = error instanceof ApiError && error.status === 404;
       toast.error(
@@ -257,11 +307,38 @@ export function POS() {
             ? error.message
             : 'Barcode lookup failed',
       );
-      // Keep the scanned value selected so a cashier can retry or correct it.
-      window.requestAnimationFrame(() => barcodeRef.current?.select());
+      // Keep a failed code available for correction, but never overwrite a
+      // newer scan that may already be typing into the input.
+      setBarcodeValue((current) => (current.trim() ? current : code));
     } finally {
+      scanningRef.current = false;
       setScanning(false);
+      if (scanQueueRef.current.length) {
+        void processScanQueue();
+      } else {
+        window.requestAnimationFrame(() => barcodeRef.current?.focus());
+      }
     }
+  }, [addToCart, toast]);
+
+  const submitBarcode = useCallback(
+    (raw: string) => {
+      const code = raw.trim();
+      if (!code) return;
+      scanQueueRef.current.push(code);
+      // Clear synchronously with the Enter event so the next scan starts fresh.
+      setBarcodeValue('');
+      void processScanQueue();
+    },
+    [processScanQueue],
+  );
+  submitBarcodeRef.current = submitBarcode;
+
+  function onBarcodeKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter' || event.repeat) return;
+    event.preventDefault();
+    event.stopPropagation();
+    submitBarcode(event.currentTarget.value);
   }
 
   function changeQuantity(productId: string, next: number) {
@@ -347,6 +424,8 @@ export function POS() {
     setCustomerName('Walk-in Customer');
     setCustomerQuery('');
     setBarcodeValue('');
+    scanQueueRef.current = [];
+    scannerBufferRef.current = '';
     toast.success('Sale completed');
     window.setTimeout(() => barcodeRef.current?.focus(), 0);
   }
