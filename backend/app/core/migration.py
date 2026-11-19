@@ -53,6 +53,14 @@ def run_migrations(engine: Engine) -> None:
                         "NUMERIC(14,2) DEFAULT 0"
                     )
                 )
+            if "wholesale_discount_percent" not in columns:
+                logger.info("Migration: adding products.wholesale_discount_percent")
+                conn.execute(
+                    text(
+                        "ALTER TABLE products ADD COLUMN wholesale_discount_percent "
+                        "NUMERIC(5,2) NOT NULL DEFAULT 0"
+                    )
+                )
             # create_all only creates this index when it creates the table; for
             # a pre-existing products table we create it explicitly here.
             conn.execute(
@@ -78,5 +86,30 @@ def run_migrations(engine: Engine) -> None:
                     "ON invoices (transaction_ref)"
                 )
             )
+            if "pricing_mode" not in columns:
+                logger.info("Migration: adding invoices.pricing_mode")
+                conn.execute(
+                    text(
+                        "ALTER TABLE invoices ADD COLUMN pricing_mode "
+                        "VARCHAR(16) NOT NULL DEFAULT 'retail'"
+                    )
+                )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_invoices_pricing_mode "
+                    "ON invoices (pricing_mode)"
+                )
+            )
+
+        if "invoice_items" in table_names:
+            columns = {c["name"] for c in inspector.get_columns("invoice_items")}
+            if "wholesale_discount_percent" not in columns:
+                logger.info("Migration: adding invoice_items.wholesale_discount_percent")
+                conn.execute(
+                    text(
+                        "ALTER TABLE invoice_items ADD COLUMN "
+                        "wholesale_discount_percent NUMERIC(5,2) NOT NULL DEFAULT 0"
+                    )
+                )
 
     logger.info("Additive schema migrations complete")

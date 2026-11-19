@@ -4,6 +4,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
+  type ComponentType,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import {
@@ -32,7 +34,13 @@ import {
   money,
   useToast,
 } from '../components/UI';
-import type { Customer, Paginated, PosCheckoutResponse, Product } from '../types';
+import type {
+  Customer,
+  Paginated,
+  PosCheckoutResponse,
+  PricingMode,
+  Product,
+} from '../types';
 
 interface CartLine {
   product: Product;
@@ -40,12 +48,55 @@ interface CartLine {
   discount_percent: number;
 }
 
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
+/** Display-only helper: the backend re-derives the charged price at checkout. */
+export function effectiveUnitPrice(product: Product, mode: PricingMode): number {
+  if (mode === 'wholesale') {
+    const discount = product.wholesale_discount_percent || 0;
+    return round2(product.price * (1 - discount / 100));
+  }
+  return product.price;
+}
+
+const pricingModeLabel = (mode: PricingMode): string =>
+  mode === 'wholesale' ? 'Wholesale' : 'Retail';
+
+/*
+ * CheckoutModal builds the /pos/qr and /pos/checkout request bodies itself.
+ * Inject the active pricing mode into just those two calls so the backend can
+ * apply its authoritative, mode-derived unit prices — no second pricing engine
+ * and no changes to the shared checkout component.
+ */
+type ApiPost = typeof api.post;
+const originalPost = api.post.bind(api) as ApiPost;
+let activePricingMode: PricingMode = 'retail';
+(api as { post: ApiPost }).post = (async (path: string, body?: unknown) => {
+  if (
+    (path === '/pos/qr' || path === '/pos/checkout') &&
+    body !== null &&
+    typeof body === 'object'
+  ) {
+    return originalPost(path, {
+      ...(body as Record<string, unknown>),
+      pricing_mode: activePricingMode,
+    });
+  }
+  return originalPost(path, body);
+}) as ApiPost;
+
+// Forward-compatible with a CheckoutModal that accepts the mode as a prop.
+const CheckoutModalWithMode = CheckoutModal as ComponentType<
+  ComponentProps<typeof CheckoutModal> & { pricingMode?: PricingMode }
+>;
+
 export function POS() {
   const { business } = useAuth();
   const currency = business?.currency ?? 'INR';
   const toast = useToast();
 
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [pricingMode, setPricingMode] = useState<PricingMode>('retail');
   const [barcodeValue, setBarcodeValue] = useState('');
   const [scanning, setScanning] = useState(false);
   const [searchInput, setSearchInput] = useState('');
@@ -69,10 +120,16 @@ export function POS() {
     barcodeRef.current?.focus();
   }, []);
 
+  // Keep the value injected into POS checkout requests in sync with the UI.
+  useEffect(() => {
+    activePricingMode = pricingMode;
+  }, [pricingMode]);
+
   // The "New Bill" button in the staff top bar resets an in-progress bill.
   useEffect(() => {
     const resetBill = () => {
       setCart([]);
+      setPricingMode('retail');
       setInvoiceDiscount('0');
       setCustomerId(null);
       setCustomerName('Walk-in Customer');
@@ -255,7 +312,7 @@ export function POS() {
     let itemDiscount = 0;
     let tax = 0;
     cart.forEach((line) => {
-      const base = line.product.price * line.quantity;
+      const base = effectiveUnitPrice(line.product, pricingMode) * line.quantity;
       const discount = base * (line.discount_percent / 100);
       const taxable = base - discount;
       subtotal += base;
@@ -272,7 +329,7 @@ export function POS() {
       total: afterTax - discount,
       units: cart.reduce((sum, line) => sum + line.quantity, 0),
     };
-  }, [cart, invoiceDiscount]);
+  }, [cart, invoiceDiscount, pricingMode]);
 
   // Opening checkout does not touch the database. The invoice, payment and
   // stock movements are created only when the cashier presses Complete Sale.
@@ -283,6 +340,8 @@ export function POS() {
 
   function onSaleComplete(_result: PosCheckoutResponse) {
     setCart([]);
+    // A completed sale starts the next bill back in retail mode.
+    setPricingMode('retail');
     setInvoiceDiscount('0');
     setCustomerId(null);
     setCustomerName('Walk-in Customer');
@@ -393,9 +452,15 @@ export function POS() {
                           {product.barcode || product.sku || 'No SKU'}
                         </span>
                         <span className="product-tile__bottom">
-                          <strong>{money(product.price, currency)}</strong>
+                          <strong>{money(effectiveUnitPrice(product, pricingMode), currency)}</strong>
                           <small>{product.gst_rate}% GST</small>
                         </span>
+                        {pricingMode === 'wholesale' && (
+                          <span className="wholesale-price">
+                            Wholesale · {product.wholesale_discount_percent || 0}% off
+                            <s>{money(product.price, currency)}</s>
+                          </span>
+                        )}
                         <span className="product-tile__stock">
                           {product.is_service ? 'Service' : `Stock: ${product.stock}`}
                           {low && !product.is_service && <Badge tone="warning" dot>Low</Badge>}
@@ -435,6 +500,30 @@ export function POS() {
                 Clear
               </Button>
             )}
+          </div>
+
+          <div className="pricing-mode-row">
+            <span className="pricing-mode-row__label">Pricing mode</span>
+            <div className="pricing-mode-switch" role="tablist" aria-label="Pricing mode">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={pricingMode === 'retail'}
+                className={`pricing-mode-switch__btn ${pricingMode === 'retail' ? 'is-active' : ''}`}
+                onClick={() => setPricingMode('retail')}
+              >
+                Retail
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={pricingMode === 'wholesale'}
+                className={`pricing-mode-switch__btn ${pricingMode === 'wholesale' ? 'is-active' : ''}`}
+                onClick={() => setPricingMode('wholesale')}
+              >
+                Wholesale
+              </button>
+            </div>
           </div>
 
           <div className="pos-customer" ref={customerRef}>
@@ -492,7 +581,8 @@ export function POS() {
               />
             ) : (
               cart.map((line) => {
-                const base = line.product.price * line.quantity;
+                const unitPrice = effectiveUnitPrice(line.product, pricingMode);
+                const base = unitPrice * line.quantity;
                 const discount = base * (line.discount_percent / 100);
                 const lineTotal = base - discount + (base - discount) * ((line.product.gst_rate || 0) / 100);
                 return (
@@ -501,8 +591,14 @@ export function POS() {
                       <div className="cart-row__name">
                         <strong>{line.product.name}</strong>
                         <small>
-                          {money(line.product.price, currency)} · {line.product.gst_rate}% GST
+                          {money(unitPrice, currency)} · {line.product.gst_rate}% GST
                         </small>
+                        {pricingMode === 'wholesale' && (
+                          <small className="wholesale-price">
+                            Wholesale price · {line.product.wholesale_discount_percent || 0}% off
+                            <s>{money(line.product.price, currency)}</s>
+                          </small>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -585,6 +681,10 @@ export function POS() {
               <span>Grand total</span>
               <strong>{money(totals.total, currency)}</strong>
             </div>
+            <div className="pos-totals__row pricing-mode-note">
+              <span>Checkout pricing mode</span>
+              <strong>{pricingModeLabel(pricingMode)}</strong>
+            </div>
           </div>
 
           <div className="pos-cart__footer">
@@ -598,6 +698,7 @@ export function POS() {
               Proceed to Payment · {money(totals.total, currency)}
             </Button>
             <p className="pos-cart__hint">
+              {pricingModeLabel(pricingMode)} pricing ·{' '}
               {cart.length === 0
                 ? 'Add at least one item to continue to payment.'
                 : 'UPI QR or cash — one step to complete the sale.'}
@@ -606,11 +707,12 @@ export function POS() {
         </aside>
       </div>
 
-      <CheckoutModal
+      <CheckoutModalWithMode
         open={checkoutOpen}
         cart={cart}
         customerId={customerId}
         discountPercent={Number(invoiceDiscount) || 0}
+        pricingMode={pricingMode}
         businessName={business?.name ?? 'BillFlow'}
         currency={currency}
         onCancel={() => setCheckoutOpen(false)}

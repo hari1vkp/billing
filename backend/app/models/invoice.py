@@ -66,6 +66,12 @@ class Invoice(BaseModel):
         Numeric(14, 2), default=0, nullable=False
     )
 
+    # "retail" (default) or "wholesale". Persisted so draft edits and completed
+    # bills keep the pricing mode they were created with.
+    pricing_mode: Mapped[str] = mapped_column(
+        String(16), default="retail", nullable=False, index=True
+    )
+
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     public_token: Mapped[str] = mapped_column(
         String(64), nullable=False, unique=True, index=True
@@ -109,6 +115,10 @@ class InvoiceItem(BaseModel):
     )
     discount_amount: Mapped[float] = mapped_column(
         Numeric(14, 2), default=0, nullable=False
+    )
+    # Snapshot of the product discount applied at bill time (0 in retail mode).
+    wholesale_discount_percent: Mapped[float] = mapped_column(
+        Numeric(5, 2), default=0, nullable=False
     )
     taxable_amount: Mapped[float] = mapped_column(
         Numeric(14, 2), default=0, nullable=False

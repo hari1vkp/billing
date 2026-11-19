@@ -99,6 +99,35 @@ pub struct CheckoutInput {
     pub transaction_ref: Option<String>,
     pub method: PaymentMethod,
     pub notes: Option<String>,
+    /// `retail` (default) or `wholesale`. Missing/unknown values are retail.
+    pub pricing_mode: String,
+}
+
+impl Default for CheckoutInput {
+    fn default() -> Self {
+        Self {
+            customer_id: None,
+            items: Vec::new(),
+            discount_percent: 0.0,
+            transaction_ref: None,
+            method: PaymentMethod::Upi,
+            notes: None,
+            pricing_mode: default_pricing_mode(),
+        }
+    }
+}
+
+/// Keep legacy callers (and blank payload fields) on the retail path.
+fn default_pricing_mode() -> String {
+    "retail".to_string()
+}
+
+fn normalize_pricing_mode(mode: &str) -> String {
+    if mode.trim().eq_ignore_ascii_case("wholesale") {
+        "wholesale".to_string()
+    } else {
+        "retail".to_string()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -128,14 +157,16 @@ pub fn checkout(
         _ => repo::resolve_or_create_walk_in(conn, business_id)?,
     };
 
+    let pricing_mode = normalize_pricing_mode(&input.pricing_mode);
     let mut lines = Vec::with_capacity(input.items.len());
+    let mut wholesale_discounts = Vec::with_capacity(input.items.len());
     for item in &input.items {
         if !item.quantity.is_finite() || item.quantity <= 0.0 {
             return Err(BillflowError::Validation(
                 "Item quantity must be greater than zero".into(),
             ));
         }
-        let product = repo::get_product(conn, business_id, &item.product_id)?.ok_or_else(|| {
+        let mut product = repo::get_product(conn, business_id, &item.product_id)?.ok_or_else(|| {
             BillflowError::Validation(format!("Product {} not found", item.product_id))
         })?;
         if item.discount_percent < 0.0 || item.discount_percent > 100.0 {
@@ -143,6 +174,19 @@ pub fn checkout(
                 "Item discount must be between 0 and 100".into(),
             ));
         }
+
+        // Product-backed lines take their authoritative unit price from the
+        // selected mode. Wholesale is derived from the product's discount;
+        // retail (and any unknown mode) keeps the stored retail price.
+        let applied_wholesale = if pricing_mode == "wholesale" {
+            product.wholesale_discount_percent.clamp(0.0, 100.0)
+        } else {
+            0.0
+        };
+        if applied_wholesale > 0.0 {
+            product.price = round2(product.price * (1.0 - applied_wholesale / 100.0));
+        }
+        wholesale_discounts.push(applied_wholesale);
         lines.push(CartLine {
             product,
             quantity: item.quantity,
@@ -176,9 +220,9 @@ pub fn checkout(
         "INSERT INTO invoices (id, business_id, customer_id, customer_name, invoice_number, \
          transaction_ref, issue_date, due_date, status, subtotal, discount_percent, \
          discount_amount, taxable_amount, tax_amount, total_amount, paid_amount, balance_amount, \
-         notes, created_at, updated_at) \
+         notes, created_at, updated_at, pricing_mode) \
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'unpaid', ?9, ?10, ?11, ?12, ?13, ?14, 0, ?15, \
-         ?16, ?17, ?17)",
+         ?16, ?17, ?17, ?18)",
         params![
             invoice_id,
             business_id,
@@ -203,6 +247,7 @@ pub fn checkout(
             totals.total,
             input.notes,
             now,
+            pricing_mode,
         ],
     )?;
 
@@ -210,8 +255,8 @@ pub fn checkout(
         tx.execute(
             "INSERT INTO invoice_items (id, invoice_id, product_id, description, quantity, \
              unit_price, discount_percent, discount_amount, taxable_amount, gst_rate, \
-             tax_amount, line_total, sort_order) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+             tax_amount, line_total, sort_order, wholesale_discount_percent) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 util::uuid(),
                 invoice_id,
@@ -226,6 +271,7 @@ pub fn checkout(
                 calc.tax,
                 calc.line_total,
                 index as i64,
+                wholesale_discounts[index],
             ],
         )?;
     }
@@ -307,6 +353,7 @@ mod tests {
             low_stock_threshold: 10.0,
             discount_type: "none".into(),
             discount_value: 0.0,
+            wholesale_discount_percent: 0.0,
             is_active: true,
             created_at: String::new(),
             updated_at: String::new(),
@@ -336,5 +383,95 @@ mod tests {
         assert_eq!(totals.discount, 43.75);
         assert_eq!(totals.total, 451.15);
         assert_eq!(totals.units, 3.0);
+    }
+
+    fn priced_product(conn: &Connection, business_id: &str, discount: f64) -> Product {
+        let product = repo::insert_product(
+            conn,
+            business_id,
+            &repo::ProductInput {
+                name: "Priced Item".into(),
+                sku: "PRICED-1".into(),
+                description: String::new(),
+                hsn_code: String::new(),
+                barcode: None,
+                price: 200.0,
+                gst_rate: 0.0,
+                stock: 10.0,
+                track_inventory: true,
+                is_service: false,
+                low_stock_threshold: 1.0,
+            },
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE products SET wholesale_discount_percent = ?1 WHERE id = ?2",
+            params![discount, &product.id],
+        )
+        .unwrap();
+        product
+    }
+
+    #[test]
+    fn checkout_defaults_to_retail_and_keeps_retail_price() {
+        let db = crate::db::Database::in_memory().unwrap();
+        let conn = db.conn();
+        let (business, user) = repo::bootstrap(&conn).unwrap();
+        let product = priced_product(&conn, &business.id, 10.0);
+
+        let result = checkout(
+            &conn,
+            &business.id,
+            &user.id,
+            CheckoutInput {
+                items: vec![CartItemInput {
+                    product_id: product.id,
+                    quantity: 2.0,
+                    discount_percent: 0.0,
+                }],
+                ..CheckoutInput::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.invoice.pricing_mode, "retail");
+        assert_eq!(result.invoice.total_amount, 400.0);
+        let detail = repo::get_invoice(&conn, &business.id, &result.invoice.id).unwrap();
+        assert_eq!(detail.items[0].unit_price, 200.0);
+        assert_eq!(detail.items[0].wholesale_discount_percent, 0.0);
+    }
+
+    #[test]
+    fn wholesale_checkout_derives_price_and_records_mode_and_discount() {
+        let db = crate::db::Database::in_memory().unwrap();
+        let conn = db.conn();
+        let (business, user) = repo::bootstrap(&conn).unwrap();
+        let product = priced_product(&conn, &business.id, 10.0);
+
+        let result = checkout(
+            &conn,
+            &business.id,
+            &user.id,
+            CheckoutInput {
+                items: vec![CartItemInput {
+                    product_id: product.id,
+                    quantity: 2.0,
+                    discount_percent: 0.0,
+                }],
+                pricing_mode: "wholesale".into(),
+                ..CheckoutInput::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.invoice.pricing_mode, "wholesale");
+        // 200 * (1 - 10/100) = 180 per unit, 2 units = 360, GST 0.
+        assert_eq!(result.invoice.total_amount, 360.0);
+        let detail = repo::get_invoice(&conn, &business.id, &result.invoice.id).unwrap();
+        assert_eq!(detail.items[0].unit_price, 180.0);
+        assert_eq!(detail.items[0].wholesale_discount_percent, 10.0);
+        // Stock movement is still driven by quantity, not the discounted price.
+        let after = repo::get_product(&conn, &business.id, &detail.items[0].product_id.clone().unwrap()).unwrap();
+        assert_eq!(after.unwrap().stock, 8.0);
     }
 }

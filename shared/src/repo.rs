@@ -82,6 +82,7 @@ fn product_from_row(row: &Row<'_>) -> rusqlite::Result<Product> {
         low_stock_threshold: row.get("low_stock_threshold")?,
         discount_type: rs(row, "discount_type")?,
         discount_value: row.get("discount_value")?,
+        wholesale_discount_percent: row.get("wholesale_discount_percent")?,
         is_active: rb(row, "is_active")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
@@ -99,6 +100,7 @@ fn invoice_from_row(row: &Row<'_>) -> rusqlite::Result<Invoice> {
         issue_date: row.get("issue_date")?,
         due_date: ro(row, "due_date")?,
         status: InvoiceStatus::from_str(&rs(row, "status")?),
+        pricing_mode: rs(row, "pricing_mode")?,
         subtotal: row.get("subtotal")?,
         discount_percent: row.get("discount_percent")?,
         discount_amount: row.get("discount_amount")?,
@@ -121,6 +123,7 @@ fn item_from_row(row: &Row<'_>) -> rusqlite::Result<InvoiceItem> {
         description: row.get("description")?,
         quantity: row.get("quantity")?,
         unit_price: row.get("unit_price")?,
+        wholesale_discount_percent: row.get("wholesale_discount_percent")?,
         discount_percent: row.get("discount_percent")?,
         discount_amount: row.get("discount_amount")?,
         taxable_amount: row.get("taxable_amount")?,
@@ -402,9 +405,9 @@ pub fn insert_product(
     let now = util::now_iso();
     conn.execute(
         "INSERT INTO products (id, business_id, name, sku, description, hsn_code, barcode, \
-         price, gst_rate, stock, track_inventory, is_service, low_stock_threshold, is_active, \
-         created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 1, ?14, ?14)",
+         price, gst_rate, stock, track_inventory, is_service, low_stock_threshold, \
+         wholesale_discount_percent, is_active, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 0, 1, ?14, ?14)",
         params![
             id,
             business_id,

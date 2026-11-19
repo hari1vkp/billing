@@ -34,17 +34,26 @@ import type { Paginated, Product, ProductInput } from '../types';
 
 const PAGE_SIZE = 15;
 
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
+/** Read-only preview of the wholesale price derived from retail + discount. */
+function wholesalePrice(retail: number, discountPercent: number): number {
+  return round2(retail * (1 - Math.min(100, Math.max(0, discountPercent)) / 100));
+}
+
 function ProductForm({
   open,
   onClose,
   initial,
   defaultGst,
+  currency,
   onSaved,
 }: {
   open: boolean;
   onClose: () => void;
   initial: Product | null;
   defaultGst: number;
+  currency: string;
   onSaved: () => void;
 }) {
   const [form, setForm] = useState<ProductInput>({});
@@ -62,6 +71,7 @@ function ProductForm({
           description: initial.description ?? '',
           hsn_code: initial.hsn_code ?? '',
           price: initial.price,
+          wholesale_discount_percent: initial.wholesale_discount_percent ?? 0,
           gst_rate: initial.gst_rate,
           stock: initial.stock,
           track_inventory: initial.track_inventory,
@@ -70,6 +80,7 @@ function ProductForm({
         }
       : {
           name: '', sku: '', barcode: '', description: '', hsn_code: '', price: 0,
+          wholesale_discount_percent: 0,
           gst_rate: defaultGst, stock: 0, track_inventory: true,
           is_service: false, low_stock_threshold: 10,
         });
@@ -78,6 +89,10 @@ function ProductForm({
   function set(field: keyof ProductInput, value: string | number | boolean) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
+
+  const retailPrice = Number(form.price) || 0;
+  const discountPercent = Math.min(100, Math.max(0, Number(form.wholesale_discount_percent) || 0));
+  const wholesalePreview = wholesalePrice(retailPrice, discountPercent);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -93,6 +108,10 @@ function ProductForm({
       barcode: form.barcode?.trim() || undefined,
       hsn_code: form.hsn_code?.trim() || undefined,
       price: Number(form.price) || 0,
+      wholesale_discount_percent: Math.min(
+        100,
+        Math.max(0, Number(form.wholesale_discount_percent) || 0),
+      ),
       gst_rate: Number(form.gst_rate) || 0,
       stock: form.is_service ? 0 : Number(form.stock) || 0,
       track_inventory: form.is_service ? false : Boolean(form.track_inventory),
@@ -161,6 +180,26 @@ function ProductForm({
           <Field label="HSN code">
             <Input value={form.hsn_code ?? ''} placeholder="6109"
               onChange={(e) => set('hsn_code', e.target.value)} />
+          </Field>
+        </div>
+        <div className="form-grid form-grid--2">
+          <Field label="Wholesale Discount (%)" hint="Applied to the retail price for wholesale bills (0–100).">
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={form.wholesale_discount_percent ?? 0}
+              onChange={(e) => set('wholesale_discount_percent', e.target.value)}
+            />
+          </Field>
+          <Field label="Wholesale price" hint="Calculated from retail price and discount; read-only.">
+            <div className="wholesale-preview" aria-live="polite">
+              <strong>{money(wholesalePreview, currency)}</strong>
+              <span className="muted small">
+                {discountPercent}% off {money(retailPrice, currency)}
+              </span>
+            </div>
           </Field>
         </div>
         <div className="form-grid form-grid--2">
@@ -324,7 +363,18 @@ export function Products({ embedded = false }: { embedded?: boolean }) {
                         <small className="cell-sub">Barcode: {product.barcode || '—'}</small>
                         <small className="cell-sub">HSN: {product.hsn_code || '—'}</small>
                       </td>
-                      <td className="text-right strong">{money(product.price, currency)}</td>
+                      <td className="text-right strong">
+                        {money(product.price, currency)}
+                        <small className="wholesale-price">
+                          Wholesale {money(
+                            product.wholesale_price ?? wholesalePrice(
+                              product.price,
+                              product.wholesale_discount_percent ?? 0,
+                            ),
+                            currency,
+                          )}
+                        </small>
+                      </td>
                       <td className="text-right">{product.gst_rate}%</td>
                       <td>
                         {product.is_service ? (
@@ -368,7 +418,7 @@ export function Products({ embedded = false }: { embedded?: boolean }) {
       </Card>
 
       <ProductForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }}
-        initial={editing} defaultGst={business?.default_gst_rate ?? 18}
+        initial={editing} defaultGst={business?.default_gst_rate ?? 18} currency={currency}
         onSaved={() => { setFormOpen(false); setEditing(null); void load(); }} />
 
       <ConfirmDialog

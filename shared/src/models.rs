@@ -193,6 +193,11 @@ fn default_discount_type() -> String {
     "none".to_string()
 }
 
+/// Bills are retail unless a caller explicitly opts into wholesale.
+fn default_pricing_mode() -> String {
+    "retail".to_string()
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Product {
     pub id: String,
@@ -215,6 +220,10 @@ pub struct Product {
     /// Product-level discount amount (percent or flat), default `0`.
     #[serde(default)]
     pub discount_value: f64,
+    /// Wholesale discount (percent) applied to `price` in wholesale mode.
+    /// Derived wholesale price = round2(price * (1 - this / 100)).
+    #[serde(default)]
+    pub wholesale_discount_percent: f64,
     pub is_active: bool,
     pub created_at: String,
     pub updated_at: String,
@@ -231,6 +240,9 @@ pub struct Invoice {
     pub issue_date: String,
     pub due_date: Option<String>,
     pub status: InvoiceStatus,
+    /// Pricing mode used for this bill (`retail` or `wholesale`).
+    #[serde(default = "default_pricing_mode")]
+    pub pricing_mode: String,
     pub subtotal: f64,
     pub discount_percent: f64,
     pub discount_amount: f64,
@@ -252,6 +264,9 @@ pub struct InvoiceItem {
     pub description: String,
     pub quantity: f64,
     pub unit_price: f64,
+    /// Wholesale discount actually applied to this line at bill time (0 in retail mode).
+    #[serde(default)]
+    pub wholesale_discount_percent: f64,
     pub discount_percent: f64,
     pub discount_amount: f64,
     pub taxable_amount: f64,

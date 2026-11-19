@@ -144,6 +144,9 @@ export type CustomerInput = Partial<Pick<
   | 'is_active'
 >>;
 
+/** The pricing mode selected for a sale / recorded on an invoice. */
+export type PricingMode = 'retail' | 'wholesale';
+
 export interface Product {
   id: string;
   business_id: string;
@@ -153,6 +156,10 @@ export interface Product {
   description?: string | null;
   hsn_code?: string | null;
   price: number;
+  /** Discount applied to the retail price when billing in wholesale mode (0..100). */
+  wholesale_discount_percent: number;
+  /** Derived by the backend: round2(price * (1 - wholesale_discount_percent / 100)). */
+  wholesale_price?: number;
   gst_rate: number;
   stock: number;
   track_inventory: boolean;
@@ -172,6 +179,8 @@ export type ProductInput = Partial<Pick<
   | 'description'
   | 'hsn_code'
   | 'price'
+  | 'wholesale_discount_percent'
+  | 'wholesale_price'
   | 'gst_rate'
   | 'stock'
   | 'track_inventory'
@@ -196,6 +205,7 @@ export interface InvoiceListItem {
   issue_date: string;
   due_date?: string | null;
   status: InvoiceStatus;
+  pricing_mode: PricingMode;
   total_amount: number;
   paid_amount: number;
   balance_amount: number;
@@ -229,6 +239,7 @@ export interface Invoice {
   issue_date: string;
   due_date?: string | null;
   status: InvoiceStatus;
+  pricing_mode: PricingMode;
   subtotal: number;
   discount_percent: number;
   discount_amount: number;
@@ -487,6 +498,13 @@ export interface PosQuoteRequest {
   items: PosCartLineInput[];
   discount_percent: number;
   transaction_ref: string;
+  /** Retail is the default; the backend computes authoritative prices from it. */
+  pricing_mode: PricingMode;
+}
+
+/** Body sent by `POST /pos/checkout`. The backend re-derives unit prices. */
+export interface PosCheckoutPayload extends PosQuoteRequest {
+  method: 'upi' | 'cash';
 }
 
 export interface PosQRResponse {

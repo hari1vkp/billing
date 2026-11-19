@@ -17,6 +17,7 @@ class PosQuoteRequest(BaseModel):
     customer_id: str | None = None
     items: list[PosCartItem] = Field(min_length=1)
     discount_percent: float = Field(default=0, ge=0, le=100)
+    pricing_mode: str = Field(default="retail", pattern="^(retail|wholesale)$")
     transaction_ref: str | None = Field(default=None, max_length=100)
 
 

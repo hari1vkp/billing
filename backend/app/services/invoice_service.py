@@ -30,8 +30,22 @@ def money(value) -> float:
     )
 
 
-def _build_items(db, business_id, item_dtos: list[InvoiceItemCreate]) -> list[InvoiceItem]:
+def _build_items(
+    db,
+    business_id,
+    item_dtos: list[InvoiceItemCreate],
+    pricing_mode: str = "retail",
+) -> list[InvoiceItem]:
+    """Build line items with the price derived from the selected pricing mode.
+
+    For product-backed lines the unit price is authoritative: retail uses the
+    product's selling price, wholesale applies the product's wholesale
+    discount. A client-supplied ``unit_price`` is therefore ignored for those
+    lines when it disagrees with the derived price. Free-text (non-product)
+    lines keep the price supplied by the caller.
+    """
     items: list[InvoiceItem] = []
+    is_wholesale = pricing_mode == "wholesale"
     for idx, dto in enumerate(item_dtos):
         product = None
         if dto.product_id:
@@ -52,9 +66,21 @@ def _build_items(db, business_id, item_dtos: list[InvoiceItemCreate]) -> list[In
                 raise ValidationError(f"No product found for barcode '{barcode}'")
 
         description = dto.description or (product.name if product else "Item")
-        unit_price = dto.unit_price
-        if unit_price is None:
-            unit_price = float(product.price) if product else 0.0
+
+        wholesale_discount = 0.0
+        if product:
+            if is_wholesale:
+                wholesale_discount = money(product.wholesale_discount_percent or 0)
+                factor = Decimal("1") - (
+                    Decimal(str(wholesale_discount)) / Decimal("100")
+                )
+                unit_price = money(Decimal(str(product.price)) * factor)
+            else:
+                unit_price = money(product.price)
+        else:
+            # Non-product lines keep the caller's price (including 0 when absent).
+            unit_price = money(dto.unit_price) if dto.unit_price is not None else 0.0
+
         gst_rate = dto.gst_rate
         if gst_rate is None:
             gst_rate = float(product.gst_rate) if product else 0.0
@@ -70,7 +96,8 @@ def _build_items(db, business_id, item_dtos: list[InvoiceItemCreate]) -> list[In
                 product_id=product.id if product else None,
                 description=description,
                 quantity=dto.quantity,
-                unit_price=money(unit_price),
+                unit_price=unit_price,
+                wholesale_discount_percent=wholesale_discount,
                 discount_percent=dto.discount_percent,
                 discount_amount=discount,
                 taxable_amount=taxable,
@@ -156,6 +183,7 @@ def calculate_quote(
     business_id: str,
     items: list[InvoiceItemCreate],
     discount_percent: float = 0,
+    pricing_mode: str = "retail",
 ) -> dict:
     """Compute the payable amounts for a cart without persisting anything.
 
@@ -167,9 +195,10 @@ def calculate_quote(
         status="unpaid",
         paid_amount=0,
         discount_percent=discount_percent,
+        pricing_mode=pricing_mode,
         items=[],
     )
-    for item in _build_items(db, business_id, items):
+    for item in _build_items(db, business_id, items, pricing_mode):
         draft.items.append(item)
     recalculate(draft)
     return {
@@ -232,6 +261,7 @@ def create_invoice(db: Session, business_id: str, user_id: str, data: InvoiceCre
         due_date=due_date,
         status=data.status,
         discount_percent=data.discount_percent,
+        pricing_mode=data.pricing_mode,
         notes=data.notes,
         public_token=generate_public_invoice_token(),
         created_by=user_id,
@@ -240,7 +270,7 @@ def create_invoice(db: Session, business_id: str, user_id: str, data: InvoiceCre
     db.add(invoice)
     db.flush()
 
-    for item in _build_items(db, business_id, data.items):
+    for item in _build_items(db, business_id, data.items, data.pricing_mode):
         item.invoice_id = invoice.id
         db.add(item)
     db.flush()
@@ -288,7 +318,13 @@ def update_invoice(
         setattr(invoice, key, value)
 
     if items_dto is not None:
-        new_items = _build_items(db, business_id, items_dto)
+        # model_dump() flattens nested DTOs into dicts; rebuild them so the
+        # shared line-item engine receives the same shape as at creation.
+        item_dtos = [InvoiceItemCreate.model_validate(item) for item in items_dto]
+        # Rebuild with the invoice's effective mode (the edit may change it).
+        new_items = _build_items(
+            db, business_id, item_dtos, invoice.pricing_mode or "retail"
+        )
         repo.replace_items(invoice, new_items)
         db.refresh(invoice, ["items"])
 

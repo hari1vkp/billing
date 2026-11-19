@@ -87,6 +87,18 @@ pub fn default_db_path() -> PathBuf {
     app_data_dir().join("billflow.sqlite3")
 }
 
+/// True when `table` already exposes `column` (used to keep ALTERs idempotent).
+fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let names = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    for name in names {
+        if name? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Idempotent, additive schema migration. Never drops or rewrites existing data.
 pub fn migrate(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -160,6 +172,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
              stock REAL NOT NULL DEFAULT 0,
              track_inventory INTEGER NOT NULL DEFAULT 1,
              is_service INTEGER NOT NULL DEFAULT 0,
+              wholesale_discount_percent REAL NOT NULL DEFAULT 0,
              low_stock_threshold REAL NOT NULL DEFAULT 10.0,
              is_active INTEGER NOT NULL DEFAULT 1,
              created_at TEXT NOT NULL,
@@ -175,6 +188,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
              issue_date TEXT NOT NULL,
              due_date TEXT,
              status TEXT NOT NULL DEFAULT 'unpaid',
+              pricing_mode TEXT NOT NULL DEFAULT 'retail',
              subtotal REAL NOT NULL DEFAULT 0,
              discount_percent REAL NOT NULL DEFAULT 0,
              discount_amount REAL NOT NULL DEFAULT 0,
@@ -195,6 +209,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
              description TEXT NOT NULL,
              quantity REAL NOT NULL,
              unit_price REAL NOT NULL,
+              wholesale_discount_percent REAL NOT NULL DEFAULT 0,
              discount_percent REAL NOT NULL DEFAULT 0,
              discount_amount REAL NOT NULL DEFAULT 0,
              taxable_amount REAL NOT NULL DEFAULT 0,
@@ -318,6 +333,24 @@ pub fn migrate(conn: &Connection) -> Result<()> {
     if !has_discount_value {
         conn.execute_batch(
             "ALTER TABLE products ADD COLUMN discount_value REAL NOT NULL DEFAULT 0;",
+        )?;
+    }
+
+    // Additive upgrade: wholesale/retail pricing. Each column is added only
+    // when absent, so repeated migrations and existing rows are never touched.
+    if !has_column(conn, "products", "wholesale_discount_percent")? {
+        conn.execute_batch(
+            "ALTER TABLE products ADD COLUMN wholesale_discount_percent REAL NOT NULL DEFAULT 0;",
+        )?;
+    }
+    if !has_column(conn, "invoices", "pricing_mode")? {
+        conn.execute_batch(
+            "ALTER TABLE invoices ADD COLUMN pricing_mode TEXT NOT NULL DEFAULT 'retail';",
+        )?;
+    }
+    if !has_column(conn, "invoice_items", "wholesale_discount_percent")? {
+        conn.execute_batch(
+            "ALTER TABLE invoice_items ADD COLUMN wholesale_discount_percent REAL NOT NULL DEFAULT 0;",
         )?;
     }
     Ok(())

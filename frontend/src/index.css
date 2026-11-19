@@ -4350,3 +4350,108 @@ input[type='number'],
   padding-top: 6px;
   padding-bottom: 6px;
 }
+
+/* ==================================================================
+   Retail / wholesale pricing mode (additive)
+   ================================================================== */
+
+.pricing-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.pricing-mode-row__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.pricing-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+.pricing-mode-switch__btn {
+  min-width: 78px;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.pricing-mode-switch__btn:hover:not(.is-active) {
+  background: var(--surface);
+}
+.pricing-mode-switch__btn.is-active {
+  background: var(--orange);
+  color: var(--surface);
+}
+.pricing-mode-switch__btn:focus-visible {
+  outline: 1px solid var(--orange);
+  outline-offset: 1px;
+}
+
+.pricing-mode-note {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 8px;
+  margin-top: 2px;
+  font-size: 12px;
+}
+.pricing-mode-note strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.wholesale-price {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.wholesale-price s {
+  margin-left: 5px;
+  color: var(--muted-light);
+}
+
+.wholesale-preview {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+}
+.wholesale-preview strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pricing-mode-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.invoice-mode {
+  margin-top: 4px;
+}
+.invoice-mode .badge {
+  font-size: 10px;
+  padding: 1px 7px;
+}

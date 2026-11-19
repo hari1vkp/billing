@@ -581,7 +581,12 @@ function InvoiceDetail({
       >
         <div className="detail-head">
           <div>
-            <StatusBadge status={invoice.status} />
+            <div className="pricing-mode-badges">
+              <StatusBadge status={invoice.status} />
+              <Badge tone={invoice.pricing_mode === 'wholesale' ? 'info' : 'neutral'}>
+                {invoice.pricing_mode === 'wholesale' ? 'Wholesale' : 'Retail'}
+              </Badge>
+            </div>
             {invoice.due_date && <p className="muted">Due {formatDate(invoice.due_date)}</p>}
           </div>
           <div className="detail-head__amount">
@@ -922,6 +927,11 @@ export function Billing() {
                         <div className="cell-with-icon">
                           <span className="cell-icon"><FileText size={16} /></span>
                           <strong className="mono">{invoice.invoice_number}</strong>
+                        </div>
+                        <div className="invoice-mode">
+                          <Badge tone={invoice.pricing_mode === 'wholesale' ? 'info' : 'neutral'}>
+                            {invoice.pricing_mode === 'wholesale' ? 'Wholesale' : 'Retail'}
+                          </Badge>
                         </div>
                       </td>
                       <td>{invoice.customer_name ?? '—'}</td>

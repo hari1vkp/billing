@@ -409,6 +409,7 @@ impl App {
             .unwrap_or(0.0)
             .clamp(0.0, 100.0);
         let input = billing::CheckoutInput {
+            pricing_mode: "retail".into(),
             customer_id: self.pos.customer_id.clone(),
             items,
             discount_percent: discount,

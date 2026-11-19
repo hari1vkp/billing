@@ -53,7 +53,7 @@ def build_qr(db: Session, business_id: str, data: PosQuoteRequest) -> PosQRRespo
         raise ValidationError("UPI ID is not configured in business settings")
 
     quote = invoice_service.calculate_quote(
-        db, business_id, data.items, data.discount_percent
+        db, business_id, data.items, data.discount_percent, data.pricing_mode
     )
     ref = _transaction_ref(data)
     payee_name = business.upi_name or business.name
@@ -95,6 +95,7 @@ def complete_checkout(
             customer_id=data.customer_id,
             items=data.items,
             discount_percent=data.discount_percent,
+            pricing_mode=data.pricing_mode,
             invoice_number=ref,
             transaction_ref=ref,
             notes=data.notes,

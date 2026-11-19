@@ -29,6 +29,7 @@ class InvoiceCreate(BaseModel):
     transaction_ref: str | None = Field(default=None, max_length=100)
     notes: str | None = None
     status: str = Field(default="unpaid", pattern="^(draft|unpaid)$")
+    pricing_mode: str = Field(default="retail", pattern="^(retail|wholesale)$")
 
     @field_validator("due_date")
     @classmethod
@@ -46,6 +47,7 @@ class InvoiceUpdate(BaseModel):
     items: list[InvoiceItemCreate] | None = Field(default=None, min_length=1)
     discount_percent: float | None = Field(default=None, ge=0, le=100)
     notes: str | None = None
+    pricing_mode: str | None = Field(default=None, pattern="^(retail|wholesale)$")
 
 
 class StatusUpdate(BaseModel):
@@ -61,6 +63,7 @@ class InvoiceItemOut(ORMModel):
     unit_price: float
     discount_percent: float
     discount_amount: float
+    wholesale_discount_percent: float = 0
     taxable_amount: float
     gst_rate: float
     tax_amount: float
@@ -80,6 +83,7 @@ class InvoiceOut(ORMModel):
     issue_date: date
     due_date: date | None = None
     status: str
+    pricing_mode: str = "retail"
     subtotal: float
     discount_percent: float = 0
     discount_amount: float
@@ -104,6 +108,7 @@ class InvoiceListItem(ORMModel):
     issue_date: date
     due_date: date | None = None
     status: str
+    pricing_mode: str = "retail"
     total_amount: float
     paid_amount: float
     balance_amount: float

@@ -44,6 +44,7 @@ fn checkout_is_atomic_and_moves_stock_once() -> Result<()> {
         &business.id,
         &user.id,
         billing::CheckoutInput {
+            pricing_mode: "retail".into(),
             customer_id: None,
             items: vec![billing::CartItemInput {
                 product_id: product.id.clone(),
