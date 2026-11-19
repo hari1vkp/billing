@@ -1,0 +1,24 @@
+---
+description: Every visualization must always use dark mode
+alwaysApply: true
+---
+
+# All visualizations are dark mode, always
+
+Every visualization created in this project — inline HTML fragments,
+self-contained HTML files, `html_preview` / `html_render` output, diagrams and
+infographics — MUST be dark mode. Never produce a light-mode visual.
+
+Rules:
+- Use a dark canvas (`#141414` or equivalent), dark panels (`#1e1e1e`),
+  light text (`#F7F5F0`), muted gray secondary text (`#A8A297`),
+  subtle dark borders (`#34312D`).
+- The only accent is flame orange `#FF6A00`, used for active/clickable states
+  and highlights. No blue, green, teal, purple, gradients, glassmorphism or
+  bright backgrounds.
+- Call `html_preview` with `appearance: "dark"` every time.
+- When writing a standalone HTML file for `html_render`, include its own CSS;
+  do not rely on host-only classes such as `.vis-card` or `.vis-chart-meta`,
+  because those render as plain text outside the chat host.
+- Keep the dark palette even if the surrounding application or another tool
+  defaults to light mode. Dark mode is the permanent default for visuals.
