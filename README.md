@@ -1,83 +1,106 @@
 # BillFlow — billing, CRM & business analytics
 
-BillFlow is a **Tauri 2** desktop app: a thin Rust shell around the **existing
-React frontend** (`frontend/`, reused unchanged). The Rust layer handles native
-operations and keeps credentials out of the browser; a WebView renders the same
-UI as the web app. There is no bundled Chromium — the OS WebView is used
-(WebKit2GTK on Linux, WebView2 on Windows).
+BillFlow is a billing-first point-of-sale and business management app for small
+and medium businesses. The primary application is a **React + TypeScript web
+app** backed by **FastAPI + PostgreSQL**. An optional **Tauri 2** shell can
+package the same frontend as a native Linux/Windows desktop app without
+bundling Chromium.
+
+![BillFlow POS — barcode-first billing screen](docs/screenshots/pos.png)
 
 ## Architecture
 
 | Path | Role |
 | --- | --- |
-| `frontend/` | Existing React + TypeScript + Vite UI — the visual source of truth, reused unchanged |
-| `src-tauri/` | Tauri 2 shell: Rust commands, config, capabilities and icons; bundles `frontend/dist` |
-| `shared/` | `billflow-shared` library — SQLite models, migrations, repositories and services reused by `src-tauri` |
-| `backend/` | Original FastAPI backend — centralized PostgreSQL data service |
-| `linux-app/`, `windows-app/` | Platform build scripts and packaging |
-| `assets/` | Source icon and generated PNG/ICO files |
-| `desktop/` | Legacy egui attempt — retained but not built |
-
-The Tauri integration contract is in [TAURI_CONTRACT.md](TAURI_CONTRACT.md).
-The Rust workspace members are `shared` and `src-tauri`.
-
-## Hybrid data model
-
-- **Centralized data** — the React UI calls the existing FastAPI backend for
-  shared business data backed by PostgreSQL. The backend URL is configurable
-  in Settings → Desktop connection and defaults to `http://127.0.0.1:8000/api/v1`.
-- **Local SQLite** — `billflow-shared` powers offline/native operations such as
-  local database status, backup and restore, native save dialogs and printing.
-- **Credentials stay in Rust** — privileged native work is exposed as a small
-  set of Tauri commands; the frontend never handles secrets directly.
-
-This is not a fully offline multi-user mode: shared operations still require a
-running backend.
+| `frontend/` | React + TypeScript + Vite UI — the visual source of truth |
+| `backend/` | FastAPI application: REST APIs, business logic, SQLAlchemy models, PostgreSQL |
+| `src-tauri/` | Optional Tauri 2 native shell (Rust commands, config, capabilities, icons) |
+| `shared/` | `billflow-shared` Rust library used by the Tauri shell for local SQLite operations |
+| `desktop/` | Earlier egui prototype, retained for reference but not built |
+| `linux-app/`, `windows-app/` | Tauri build scripts and packaging for Linux/Windows |
+| `mcp-server/` | Separate Product Discovery MCP server for external AI assistants |
+| `assets/` | Source and generated app icons (also used as the web favicon) |
 
 ## Features
 
-- **Point of sale** — multi-item cart with quantity and discount controls,
-  GST totals and a two-tab checkout (UPI QR / cash).
-- **Barcode lookup** — scan or type a barcode to add a product to the cart.
-- **UPI QR payments** — amount-locked `upi://pay` QR from the business VPA.
-- **Inventory** — products and services, SKU/HSN, stock tracking, low-stock
-  alerts and audited adjustments.
-- **Customers** — profiles, purchase history, outstanding balances and notes.
-- **Analytics** — sales, collections, growth, trends, payment-method split and
-  top products/customers.
-- **Roles and audit** — owner/staff roles and an activity log.
-- **Reports** — CSV exports and PDF invoices via native save/print commands.
+- **Billing-first POS** — search or scan products, cart with quantity/discount
+  controls, retail/wholesale pricing switch, GST totals and a two-tab checkout
+  (UPI QR / cash).
+- **USB barcode scanners** — keyboard-wedge scanner support: continuous
+  scanning, Enter suffix handling, and focus management even when another field
+  has focus.
+- **Barcode Sticker Studio** — product selection with per-product quantities,
+  40×25 mm default package-ready labels, A4 sticker sheets and individual-size
+  printing, with genuine Code 128 / EAN 13 barcodes.
+- **Inventory & product onboarding** — products, SKUs, barcodes, stock,
+  low-stock alerts, CSV/Excel import, photo/PDF OCR, and an AI-assisted
+  catalogue prompt generator.
+- **Suppliers** — user-defined categories, supplier-product links, purchase
+  reminders, visit history, active/deactivated states and safe purchase
+  conversion through the existing inventory flow.
+- **Customers & analytics** — profiles and purchase history, sales trends,
+  collections, growth, payment-method breakdown and CSV reports.
+- **Payments & audit** — cash/UPI confirmation, UPI QR with amount and
+  transaction reference, roles (owner/staff) and an activity log.
 
-## Quick start
+## Quick start (web app)
 
-With Node/npm and Rust installed:
+Requires Python 3.12+, Node/npm and PostgreSQL.
+
+```bash
+# Database (if you do not already have one)
+docker run -d --name billing-db \
+  -e POSTGRES_USER=billing -e POSTGRES_PASSWORD=billing_dev_pass \
+  -e POSTGRES_DB=billing -p 5433:5432 postgres:16-alpine
+
+# Backend
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python seed.py                      # demo data, optional
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Frontend (another terminal)
+cd frontend
+npm install
+npm run dev                         # http://localhost:5173
+```
+
+Demo login: `demo@billingapp.com` / `Demo@1234` (staff:
+`staff@billingapp.com` / `Staff@1234`). API docs: <http://localhost:8000/docs>.
+
+## Optional desktop build (Tauri 2)
+
+From the repository root:
 
 ```bash
 npm install
-npm run tauri:dev
+npm run tauri:dev       # development window
+npm run tauri:build     # installers in src-tauri/target/release/bundle/
 ```
 
-The backend must be running for shared data features. Sign in with the demo
-account `demo@billingapp.com` / `Demo@1234`.
+See the [Linux build](linux-app/README.md), [Windows build](windows-app/README.md)
+and their packaging notes. Tauri uses WebKit2GTK on Linux and WebView2 on
+Windows; no Node, Python or browser runtime is bundled.
 
-## Build
+## Product Discovery MCP server
 
-- [Linux build](linux-app/README.md) and [Linux packaging](linux-app/packaging/README.md)
-- [Windows build](windows-app/README.md) and [Windows packaging](windows-app/packaging/README.md)
+[`mcp-server/`](mcp-server/README.md) is a separate, read-only MCP server that
+helps external AI assistants find real products and verified manufacturer
+barcodes. It never manages BillFlow inventory or business data.
 
-`npm run tauri:build` produces installers under
-`src-tauri/target/release/bundle/`; the platform scripts stage them into
-`linux-app/packaging/dist/` or `windows-app/packaging/dist/`.
+## Data model
 
-## Data locations
+- **PostgreSQL** is the centralized store for the web app. All business data is
+  tenant-scoped by `business_id`.
+- **Local SQLite** is used by the Tauri shell for offline/native operations,
+  backups and restore; it is not a parallel product catalogue.
+- Credentials and privileged native operations stay in Rust when using Tauri;
+  the frontend never handles database secrets.
 
-| Platform | Local SQLite | Backend URL setting |
-| --- | --- | --- |
-| Linux | `~/.local/share/billflow/billflow.sqlite3` | `~/.local/share/billflow/settings.json` |
-| Windows | `%APPDATA%\BillFlow\billflow.sqlite3` | `%APPDATA%\BillFlow\settings.json` |
+## Tests
 
-## Legacy
-
-`desktop/` holds the earlier egui/Rust prototype. It is retained as a reference
-but is not a workspace member and is not built. `backend/` and `frontend/`
-remain the original full-stack web app; see their own folders for that setup.
+```bash
+cd backend && .venv/bin/python -m unittest discover -s tests
+cd frontend && npm run build
+```

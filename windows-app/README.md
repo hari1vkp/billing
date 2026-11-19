@@ -1,6 +1,7 @@
 # BillFlow for Windows
 
-Builds the Tauri 2 desktop app: a thin Rust shell around the **existing React
+The primary application is the web app — see the [root README](../README.md).
+This folder builds the optional Tauri 2 desktop app: a thin Rust shell around the **existing React
 frontend** (`frontend/`, reused unchanged). Tauri uses the system WebView2
 control, so no Chromium/Node/Python runtime is bundled or installed.
 

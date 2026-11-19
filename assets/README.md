@@ -1,8 +1,7 @@
 # BillFlow icon assets
 
 `icon.svg` is the source of truth. The mark is the existing BillFlow "B"
-monogram on a rounded square; it is recolored to the BillFlow palette from
-`CONTRACT.md`:
+monogram on a rounded square, using the BillFlow palette:
 
 | Colour | Hex | Use |
 | --- | --- | --- |
@@ -14,12 +13,14 @@ No other colours, gradients or shadows are used.
 
 Generated binaries checked into this folder:
 
-- `icon.png` — 256 x 256 RGBA, used by the Linux `.desktop` launcher and AppImage.
+- `icon.png` — 256 x 256 RGBA, used by the Linux `.desktop` launcher, AppImage,
+  and as the web app's PNG favicon / touch icon.
 - `icon.ico` — multi-size Windows icon (16/32/48/64/128/256), used by the
-  portable bundle and the Inno Setup installer.
+  portable bundle, installer, and as the web app's ICO favicon.
 
-These files are build-time artefacts only. The native app has **no runtime
-dependency** on any image tool, Python or Node.
+The same files are copied to `frontend/public/` for the web app and to
+`src-tauri/icons/` for desktop packaging. These are build-time assets only;
+neither app has a runtime dependency on an image tool.
 
 ## Regenerating the raster files
 
