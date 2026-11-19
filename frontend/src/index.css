@@ -5472,3 +5472,17 @@ input[type='number'],
     white-space: normal;
   }
 }
+
+/* Barcode Studio embedded in the Inventory tabs */
+.sticker-embedded-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}

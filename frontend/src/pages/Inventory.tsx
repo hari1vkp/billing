@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { AlertTriangle, Boxes, Package, Printer, SlidersHorizontal, Sparkles, Upload, X } from 'lucide-react';
-import { api, downloadFile } from '../api/client';
+import { AlertTriangle, Boxes, Package, ScanLine, SlidersHorizontal, Sparkles, Upload, X } from 'lucide-react';
+import { api } from '../api/client';
 import {
   Badge,
   Button,
@@ -20,6 +20,7 @@ import {
 import { Products } from './Products';
 import { ImportProducts } from './ImportProducts';
 import { AICatalogue } from './AICatalogue';
+import { BarcodeStickerStudio } from './BarcodeStickerStudio';
 import type { Paginated, Product, StockMovement } from '../types';
 
 const PAGE_SIZE = 15;
@@ -38,7 +39,7 @@ const OWNER_REASONS = [
 
 export function Inventory() {
   const toast = useToast();
-  const [tab, setTab] = useState<'products' | 'movements'>('products');
+  const [tab, setTab] = useState<'products' | 'movements' | 'barcodes'>('products');
   const [products, setProducts] = useState<Product[]>([]);
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [productId, setProductId] = useState('');
@@ -50,7 +51,6 @@ export function Inventory() {
   const [loading, setLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
-  const [printingLabels, setPrintingLabels] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [adjustForm, setAdjustForm] = useState({
     product_id: '',
@@ -99,25 +99,6 @@ export function Inventory() {
     if (tab === 'movements') void loadMovements();
   }, [tab, loadMovements]);
 
-  async function printBarcodeLabels() {
-    const ids = products.map((product) => product.id).filter(Boolean);
-    if (!ids.length) {
-      toast.error('Add some products before printing barcode labels.');
-      return;
-    }
-    setPrintingLabels(true);
-    try {
-      await downloadFile(
-        `/products/barcodes/labels?ids=${encodeURIComponent(ids.join(','))}`,
-        'billflow-barcode-labels.pdf',
-      );
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not print barcode labels.');
-    } finally {
-      setPrintingLabels(false);
-    }
-  }
-
   function openAdjust() {
     setAdjustForm({
       product_id: products[0]?.id ?? '',
@@ -165,7 +146,7 @@ export function Inventory() {
     <>
       <PageHeader
         title="Inventory"
-        subtitle="Products, stock levels and every adjustment in one place"
+        subtitle="Products, stock levels, barcode stickers and adjustments in one place"
         actions={
           <>
             <Button variant="secondary" icon={<Sparkles size={16} />} onClick={() => setAiOpen(true)}>
@@ -173,10 +154,6 @@ export function Inventory() {
             </Button>
             <Button variant="secondary" icon={<Upload size={16} />} onClick={() => setImportOpen(true)}>
               Import Products
-            </Button>
-            <Button variant="secondary" icon={<Printer size={16} />} loading={printingLabels}
-              onClick={() => void printBarcodeLabels()}>
-              Print barcode labels
             </Button>
             <Button icon={<SlidersHorizontal size={16} />} onClick={openAdjust}>
               Adjust stock
@@ -204,9 +181,20 @@ export function Inventory() {
         >
           <Boxes size={16} /> Stock movements
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'barcodes'}
+          className={tab === 'barcodes' ? 'admin-tab admin-tab--active' : 'admin-tab'}
+          onClick={() => setTab('barcodes')}
+        >
+          <ScanLine size={16} /> Barcode Studio
+        </button>
       </div>
 
-      {tab === 'products' ? (
+      {tab === 'barcodes' ? (
+        <BarcodeStickerStudio embedded />
+      ) : tab === 'products' ? (
         <Products embedded />
       ) : (
         <>

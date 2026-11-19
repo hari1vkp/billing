@@ -57,7 +57,7 @@ function layoutLabel(layout: StickerLayout): string {
   return layout === 'sheet' ? 'A4 sheet' : 'Individual';
 }
 
-export function BarcodeStickerStudio() {
+export function BarcodeStickerStudio({ embedded = false }: { embedded?: boolean } = {}) {
   const toast = useToast();
 
   /* Product browser */
@@ -315,26 +315,44 @@ export function BarcodeStickerStudio() {
 
   return (
     <div className="sticker-page">
-      <PageHeader
-        title="Barcode Studio"
-        subtitle="Select products, choose a sticker size and print scannable barcodes"
-        actions={
-          <>
-            <span className="sticker-total">
-              <strong>{totalStickers}</strong> sticker{totalStickers === 1 ? '' : 's'} ·{' '}
-              <strong>{selectedList.length}</strong> selected
-            </span>
-            <Button
-              variant="secondary"
-              icon={<Trash2 size={15} />}
-              onClick={clearSelection}
-              disabled={!selectedList.length}
-            >
-              Clear Selection
-            </Button>
-          </>
-        }
-      />
+      {embedded ? (
+        <div className="sticker-embedded-bar">
+          <span className="muted small">Select products, choose a sticker size and print scannable barcodes</span>
+          <span className="sticker-total">
+            <strong>{totalStickers}</strong> sticker{totalStickers === 1 ? '' : 's'} ·{' '}
+            <strong>{selectedList.length}</strong> selected
+          </span>
+          <Button
+            variant="secondary"
+            icon={<Trash2 size={15} />}
+            onClick={clearSelection}
+            disabled={!selectedList.length}
+          >
+            Clear Selection
+          </Button>
+        </div>
+      ) : (
+        <PageHeader
+          title="Barcode Studio"
+          subtitle="Select products, choose a sticker size and print scannable barcodes"
+          actions={
+            <>
+              <span className="sticker-total">
+                <strong>{totalStickers}</strong> sticker{totalStickers === 1 ? '' : 's'} ·{' '}
+                <strong>{selectedList.length}</strong> selected
+              </span>
+              <Button
+                variant="secondary"
+                icon={<Trash2 size={15} />}
+                onClick={clearSelection}
+                disabled={!selectedList.length}
+              >
+                Clear Selection
+              </Button>
+            </>
+          }
+        />
+      )}
 
       <Card>
         <CardHeader
