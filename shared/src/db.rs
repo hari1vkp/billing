@@ -297,6 +297,114 @@ pub fn migrate(conn: &Connection) -> Result<()> {
          ",
     )?;
 
+    // Additive supplier module schema. All statements are idempotent and
+    // non-destructive: CREATE TABLE/INDEX IF NOT EXISTS only, with no ALTERs
+    // or rewrites to any pre-existing table or row.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS suppliers (
+             id TEXT PRIMARY KEY,
+             business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+             name TEXT NOT NULL,
+             contact_person TEXT,
+             phone TEXT,
+             whatsapp TEXT,
+             email TEXT,
+             address TEXT,
+             category TEXT,
+             brands TEXT,
+             notes TEXT,
+             is_active INTEGER NOT NULL DEFAULT 1,
+             created_at TEXT NOT NULL,
+             updated_at TEXT NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS supplier_products (
+             id TEXT PRIMARY KEY,
+             business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+             supplier_id TEXT NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+             product_id TEXT REFERENCES products(id) ON DELETE SET NULL,
+             custom_name TEXT,
+             supplier_sku TEXT,
+             supplier_price REAL NOT NULL DEFAULT 0,
+             notes TEXT
+         );
+         CREATE TABLE IF NOT EXISTS purchase_reminder_lists (
+             id TEXT PRIMARY KEY,
+             business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+             supplier_id TEXT NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+             title TEXT NOT NULL,
+             status TEXT NOT NULL DEFAULT 'pending',
+             notes TEXT,
+             created_by TEXT,
+             created_at TEXT NOT NULL,
+             updated_at TEXT NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS purchase_reminder_items (
+             id TEXT PRIMARY KEY,
+             list_id TEXT NOT NULL REFERENCES purchase_reminder_lists(id) ON DELETE CASCADE,
+             product_id TEXT REFERENCES products(id) ON DELETE SET NULL,
+             name TEXT NOT NULL,
+             quantity REAL NOT NULL DEFAULT 0,
+             unit TEXT,
+             expected_price REAL,
+             notes TEXT,
+             is_purchased INTEGER NOT NULL DEFAULT 0,
+             created_at TEXT NOT NULL,
+             updated_at TEXT NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS supplier_visits (
+             id TEXT PRIMARY KEY,
+             business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+             supplier_id TEXT NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+             visit_date TEXT NOT NULL,
+             discussion_notes TEXT,
+             items_discussed TEXT,
+             items_requested TEXT,
+             follow_up TEXT,
+             next_visit_date TEXT,
+             notes TEXT,
+             created_by TEXT,
+             created_at TEXT NOT NULL,
+             updated_at TEXT NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS supplier_purchases (
+             id TEXT PRIMARY KEY,
+             business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+             supplier_id TEXT NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+             purchase_number TEXT NOT NULL,
+             purchase_date TEXT NOT NULL,
+             reminder_list_id TEXT REFERENCES purchase_reminder_lists(id) ON DELETE SET NULL,
+             notes TEXT,
+             created_by TEXT,
+             created_at TEXT NOT NULL,
+             updated_at TEXT NOT NULL,
+             UNIQUE (business_id, purchase_number)
+         );
+         CREATE TABLE IF NOT EXISTS supplier_purchase_items (
+             id TEXT PRIMARY KEY,
+             purchase_id TEXT NOT NULL REFERENCES supplier_purchases(id) ON DELETE CASCADE,
+             product_id TEXT NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+             quantity REAL NOT NULL,
+             unit_price REAL NOT NULL,
+             line_total REAL NOT NULL,
+             reminder_item_id TEXT REFERENCES purchase_reminder_items(id) ON DELETE SET NULL
+         );
+         CREATE INDEX IF NOT EXISTS ix_suppliers_business ON suppliers(business_id);
+         CREATE INDEX IF NOT EXISTS ix_suppliers_category ON suppliers(category);
+         CREATE INDEX IF NOT EXISTS ix_supplier_products_business ON supplier_products(business_id);
+         CREATE INDEX IF NOT EXISTS ix_supplier_products_supplier ON supplier_products(supplier_id);
+         CREATE INDEX IF NOT EXISTS ix_supplier_products_product ON supplier_products(product_id);
+         CREATE INDEX IF NOT EXISTS ix_reminder_lists_business ON purchase_reminder_lists(business_id);
+         CREATE INDEX IF NOT EXISTS ix_reminder_lists_supplier ON purchase_reminder_lists(supplier_id);
+         CREATE INDEX IF NOT EXISTS ix_reminder_items_list ON purchase_reminder_items(list_id);
+         CREATE INDEX IF NOT EXISTS ix_reminder_items_product ON purchase_reminder_items(product_id);
+         CREATE INDEX IF NOT EXISTS ix_supplier_visits_business ON supplier_visits(business_id);
+         CREATE INDEX IF NOT EXISTS ix_supplier_visits_supplier ON supplier_visits(supplier_id);
+         CREATE INDEX IF NOT EXISTS ix_supplier_purchases_business ON supplier_purchases(business_id);
+         CREATE INDEX IF NOT EXISTS ix_supplier_purchases_supplier ON supplier_purchases(supplier_id);
+         CREATE INDEX IF NOT EXISTS ix_supplier_purchase_items_purchase ON supplier_purchase_items(purchase_id);
+         ",
+     )?;
+
     // Additive upgrade for databases created before `confirmed_by` existed.
     let mut stmt = conn.prepare("PRAGMA table_info(payments)")?;
     let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;

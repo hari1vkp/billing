@@ -31,6 +31,24 @@ def run_migrations(engine: Engine) -> None:
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
 
+    # Read supplier-table column info BEFORE opening the write transaction:
+    # with SQLite in-memory databases the inspector shares the pool connection,
+    # and querying it mid-transaction can close that connection underneath us.
+    _supplier_table_names = (
+        "suppliers",
+        "supplier_products",
+        "purchase_reminder_lists",
+        "purchase_reminder_items",
+        "supplier_visits",
+        "supplier_purchases",
+        "supplier_purchase_items",
+    )
+    supplier_existing_columns = {
+        name: {c["name"] for c in inspector.get_columns(name)}
+        for name in _supplier_table_names
+        if name in table_names
+    }
+
     with engine.begin() as conn:
         if "products" in table_names:
             columns = {c["name"] for c in inspector.get_columns("products")}
@@ -111,5 +129,123 @@ def run_migrations(engine: Engine) -> None:
                         "wholesale_discount_percent NUMERIC(5,2) NOT NULL DEFAULT 0"
                     )
                 )
+
+    with engine.begin() as conn:
+        # Supplier management tables. ``create_all`` above creates them on a fresh
+        # database; the block below makes startup idempotent even if a partially
+        # built database already contains one of these tables (legacy/partial
+        # installs): only missing columns are added, nothing is ever dropped.
+        supplier_table_columns = {
+            "suppliers": {
+                "business_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "name": "VARCHAR(200) NOT NULL DEFAULT ''",
+                "contact_person": "VARCHAR(150)",
+                "phone": "VARCHAR(40)",
+                "whatsapp": "VARCHAR(40)",
+                "email": "VARCHAR(255)",
+                "address": "TEXT",
+                "category": "VARCHAR(100)",
+                "brands": "TEXT",
+                "notes": "TEXT",
+                "is_active": "BOOLEAN NOT NULL DEFAULT 1",
+            },
+            "supplier_products": {
+                "business_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "supplier_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "product_id": "VARCHAR(36)",
+                "custom_name": "VARCHAR(200)",
+                "supplier_sku": "VARCHAR(80)",
+                "supplier_price": "NUMERIC(14,2)",
+                "notes": "TEXT",
+            },
+            "purchase_reminder_lists": {
+                "business_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "supplier_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "title": "VARCHAR(200) NOT NULL DEFAULT ''",
+                "status": "VARCHAR(16) NOT NULL DEFAULT 'pending'",
+                "notes": "TEXT",
+                "created_by": "VARCHAR(36)",
+            },
+            "purchase_reminder_items": {
+                "business_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "list_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "product_id": "VARCHAR(36)",
+                "name": "VARCHAR(200) NOT NULL DEFAULT ''",
+                "quantity": "NUMERIC(14,3) NOT NULL DEFAULT 0",
+                "unit": "VARCHAR(50)",
+                "expected_price": "NUMERIC(14,2)",
+                "notes": "TEXT",
+                "is_purchased": "BOOLEAN NOT NULL DEFAULT 0",
+            },
+            "supplier_visits": {
+                "business_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "supplier_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "visit_date": "DATE",
+                "discussion_notes": "TEXT",
+                "items_discussed": "TEXT",
+                "items_requested": "TEXT",
+                "follow_up": "TEXT",
+                "next_visit_date": "DATE",
+                "notes": "TEXT",
+                "created_by": "VARCHAR(36)",
+            },
+            "supplier_purchases": {
+                "business_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "supplier_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "purchase_number": "VARCHAR(50) NOT NULL DEFAULT ''",
+                "purchase_date": "DATE",
+                "reminder_list_id": "VARCHAR(36)",
+                "notes": "TEXT",
+                "created_by": "VARCHAR(36)",
+            },
+            "supplier_purchase_items": {
+                "business_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "purchase_id": "VARCHAR(36) NOT NULL DEFAULT ''",
+                "product_id": "VARCHAR(36)",
+                "quantity": "NUMERIC(14,3) NOT NULL DEFAULT 0",
+                "unit_price": "NUMERIC(14,2) NOT NULL DEFAULT 0",
+                "line_total": "NUMERIC(14,2) NOT NULL DEFAULT 0",
+                "reminder_item_id": "VARCHAR(36)",
+            },
+        }
+        for table_name, columns in supplier_table_columns.items():
+            if table_name not in table_names:
+                continue
+            existing_columns = supplier_existing_columns.get(table_name, set())
+            for column_name, definition in columns.items():
+                if column_name not in existing_columns:
+                    logger.info("Migration: adding %s.%s", table_name, column_name)
+                    conn.execute(
+                        text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+                    )
+
+        supplier_indexes = (
+            "CREATE INDEX IF NOT EXISTS ix_suppliers_business_id ON suppliers (business_id)",
+            "CREATE INDEX IF NOT EXISTS ix_suppliers_category ON suppliers (category)",
+            "CREATE INDEX IF NOT EXISTS ix_supplier_products_supplier_id "
+            "ON supplier_products (supplier_id)",
+            "CREATE INDEX IF NOT EXISTS ix_supplier_products_product_id "
+            "ON supplier_products (product_id)",
+            "CREATE INDEX IF NOT EXISTS ix_purchase_reminder_lists_supplier_id "
+            "ON purchase_reminder_lists (supplier_id)",
+            "CREATE INDEX IF NOT EXISTS ix_purchase_reminder_items_list_id "
+            "ON purchase_reminder_items (list_id)",
+            "CREATE INDEX IF NOT EXISTS ix_purchase_reminder_items_product_id "
+            "ON purchase_reminder_items (product_id)",
+            "CREATE INDEX IF NOT EXISTS ix_supplier_visits_supplier_id "
+            "ON supplier_visits (supplier_id)",
+            "CREATE INDEX IF NOT EXISTS ix_supplier_purchases_business_id "
+            "ON supplier_purchases (business_id)",
+            "CREATE INDEX IF NOT EXISTS ix_supplier_purchase_items_purchase_id "
+            "ON supplier_purchase_items (purchase_id)",
+        )
+        for statement in supplier_indexes:
+            table = statement.split(" ON ", 1)[-1].split(" ", 1)[0]
+            if table in table_names:
+                conn.execute(text(statement))
+
+        # StockMovement.reason is a plain VARCHAR(50); no schema change is needed
+        # for the new "purchase" reason. Conversion uses the existing receiving
+        # path (inventory_service.record_movement), which accepts any reason.
 
     logger.info("Additive schema migrations complete")

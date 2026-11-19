@@ -17,6 +17,7 @@ import { Activity } from './pages/Activity';
 import { Settings } from './pages/Settings';
 import { POS } from './pages/POS';
 import { StaffStock } from './pages/StaffStock';
+import { Suppliers } from './pages/Suppliers';
 
 function FullPageLoader() {
   return (
@@ -80,6 +81,7 @@ export default function App() {
         <Route path="/admin/billing" element={<Billing />} />
         <Route path="/admin/inventory" element={<Inventory />} />
         <Route path="/admin/customers" element={<Customers />} />
+        <Route path="/admin/suppliers" element={<Suppliers />} />
         <Route path="/admin/payments" element={<Payments />} />
         <Route path="/admin/analytics" element={<Analytics />} />
         <Route path="/admin/staff" element={<Staff />} />

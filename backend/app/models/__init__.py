@@ -9,6 +9,15 @@ from app.models.invoice import Invoice, InvoiceItem  # noqa: F401
 from app.models.payment import Payment, WebhookEvent  # noqa: F401
 from app.models.stock_movement import StockMovement  # noqa: F401
 from app.models.activity_log import ActivityLog  # noqa: F401
+from app.models.supplier import (  # noqa: F401
+    PurchaseReminderItem,
+    PurchaseReminderList,
+    Supplier,
+    SupplierProduct,
+    SupplierPurchase,
+    SupplierPurchaseItem,
+    SupplierVisit,
+)
 
 __all__ = [
     "BaseModel",
@@ -25,4 +34,11 @@ __all__ = [
     "WebhookEvent",
     "StockMovement",
     "ActivityLog",
+    "Supplier",
+    "SupplierProduct",
+    "PurchaseReminderList",
+    "PurchaseReminderItem",
+    "SupplierVisit",
+    "SupplierPurchase",
+    "SupplierPurchaseItem",
 ]

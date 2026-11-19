@@ -667,3 +667,168 @@ export interface AIPromptRequest {
 export interface AIPromptResponse {
   prompt: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Supplier management (owner-only, additive)                          */
+/* ------------------------------------------------------------------ */
+
+/** A supplier / vendor. All text taxonomy fields are user-defined. */
+export interface Supplier {
+  id: string;
+  business_id?: string;
+  name: string;
+  contact_person?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+  email?: string | null;
+  address?: string | null;
+  category?: string | null;
+  brands?: string | null;
+  notes?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  /** Derived by the supplier list endpoint. */
+  product_count?: number;
+  product_type?: string | null;
+}
+
+/** Only the name is required; every other field is optional. */
+export type SupplierInput = Partial<Pick<
+  Supplier,
+  | 'name'
+  | 'contact_person'
+  | 'phone'
+  | 'whatsapp'
+  | 'email'
+  | 'address'
+  | 'category'
+  | 'brands'
+  | 'notes'
+  | 'is_active'
+>>;
+
+/**
+ * Suggestions returned by `GET /suppliers/categories`. These are derived from
+ * data owners have already entered — never a hardcoded industry list.
+ */
+export interface SupplierCategorySuggestions {
+  categories?: string[];
+  brands?: string[];
+  product_types?: string[];
+  /** Some API envelopes wrap the payload in `data`. */
+  data?: SupplierCategorySuggestions;
+}
+
+/** A link between a supplier and an existing product or a custom item name. */
+export interface SupplierProduct {
+  id: string;
+  supplier_id: string;
+  product_id?: string | null;
+  product_name?: string | null;
+  product_sku?: string | null;
+  custom_name?: string | null;
+  supplier_sku?: string | null;
+  supplier_price?: number | null;
+  notes?: string | null;
+}
+
+export interface SupplierProductInput {
+  /** Existing BillFlow product id, or null/empty for a custom name. */
+  product_id?: string | null;
+  custom_name?: string | null;
+  supplier_sku?: string | null;
+  supplier_price?: number | null;
+  notes?: string | null;
+}
+
+export type ReminderListStatus = 'pending' | 'converted' | string;
+
+/** A purchaser's reminder list for a supplier; multiple per supplier. */
+export interface PurchaseReminderList {
+  id: string;
+  supplier_id: string;
+  title: string;
+  status: ReminderListStatus;
+  notes?: string | null;
+  created_at?: string;
+  /** Some detail payloads embed the items; others expose a separate endpoint. */
+  items?: PurchaseReminderItem[];
+}
+
+/** One line on a reminder list. Ticking purchased never mutates stock. */
+export interface PurchaseReminderItem {
+  id: string;
+  list_id: string;
+  product_id?: string | null;
+  product_name?: string | null;
+  name: string;
+  quantity: number;
+  unit?: string | null;
+  expected_price?: number | null;
+  notes?: string | null;
+  is_purchased: boolean;
+}
+
+export interface PurchaseReminderItemInput {
+  product_id?: string | null;
+  custom_name?: string | null;
+  name?: string | null;
+  quantity?: number;
+  unit?: string | null;
+  expected_price?: number | null;
+  notes?: string | null;
+  is_purchased?: boolean;
+}
+
+export interface SupplierVisit {
+  id: string;
+  supplier_id: string;
+  visit_date: string;
+  discussion_notes?: string | null;
+  items_discussed?: string | null;
+  items_requested?: string | null;
+  follow_up?: string | null;
+  next_visit_date?: string | null;
+  notes?: string | null;
+  created_by?: string | null;
+  created_at?: string;
+}
+
+export interface SupplierVisitInput {
+  visit_date?: string;
+  discussion_notes?: string | null;
+  items_discussed?: string | null;
+  items_requested?: string | null;
+  follow_up?: string | null;
+  next_visit_date?: string | null;
+  notes?: string | null;
+}
+
+/** `GET /suppliers/{id}` — detail payload with related records. */
+export type SupplierDetail = Supplier & {
+  products?: SupplierProduct[];
+  supplier_products?: SupplierProduct[];
+  reminder_lists?: PurchaseReminderList[];
+  reminders?: PurchaseReminderList[];
+  visits?: SupplierVisit[];
+};
+
+/** Response from `POST /suppliers/reminders/{list_id}/convert-to-purchase`. */
+export interface SupplierPurchaseConversion {
+  message?: string;
+  purchase_number?: string;
+  purchase_date?: string;
+  purchase?: {
+    id?: string;
+    purchase_number?: string;
+    purchase_date?: string;
+    notes?: string | null;
+  } | null;
+  items_created?: number;
+  stock_movements?: number;
+  movements_created?: number;
+  custom_items_skipped?: number;
+  skipped_custom_items?: number;
+  total_amount?: number;
+}

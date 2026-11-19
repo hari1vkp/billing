@@ -364,3 +364,124 @@ pub struct ImportSummary {
     pub stock_movements: i64,
     pub activity_entries: i64,
 }
+
+// ---------------------------------------------------------------------------
+// Supplier module (additive schema compatibility).
+//
+// Plain data views of the supplier-related SQLite tables. These models carry no
+// business logic; they only mirror persisted columns so repository/service
+// layers (present elsewhere) can map rows to typed values. Tenant scoping uses
+// `business_id` exactly where the supplier contract specifies it.
+// ---------------------------------------------------------------------------
+
+/// A supplier/company a business purchases from.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Supplier {
+    pub id: String,
+    pub business_id: String,
+    pub name: String,
+    pub contact_person: Option<String>,
+    pub phone: Option<String>,
+    pub whatsapp: Option<String>,
+    pub email: Option<String>,
+    pub address: Option<String>,
+    /// Free-text category; never a hardcoded industry list.
+    pub category: Option<String>,
+    /// Free-text brand list (e.g. comma separated).
+    pub brands: Option<String>,
+    pub notes: Option<String>,
+    pub is_active: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// A link between a supplier and a product, or a custom-name fallback product.
+/// Never creates inventory products — an existing `product_id` is required to
+/// reference a BillFlow product; otherwise `custom_name` is used.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SupplierProduct {
+    pub id: String,
+    pub business_id: String,
+    pub supplier_id: String,
+    pub product_id: Option<String>,
+    pub custom_name: Option<String>,
+    pub supplier_sku: Option<String>,
+    pub supplier_price: f64,
+    pub notes: Option<String>,
+}
+
+/// A purchase reminder list for a supplier (`pending` or `converted`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PurchaseReminderList {
+    pub id: String,
+    pub business_id: String,
+    pub supplier_id: String,
+    pub title: String,
+    pub status: String,
+    pub notes: Option<String>,
+    pub created_by: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// An item on a purchase reminder list. Ticking `is_purchased` never mutates
+/// stock; conversion is what creates real inventory movements.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PurchaseReminderItem {
+    pub id: String,
+    pub list_id: String,
+    pub product_id: Option<String>,
+    pub name: String,
+    pub quantity: f64,
+    pub unit: Option<String>,
+    pub expected_price: Option<f64>,
+    pub notes: Option<String>,
+    pub is_purchased: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// A recorded visit to a supplier, with discussion and follow-up notes.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SupplierVisit {
+    pub id: String,
+    pub business_id: String,
+    pub supplier_id: String,
+    pub visit_date: String,
+    pub discussion_notes: Option<String>,
+    pub items_discussed: Option<String>,
+    pub items_requested: Option<String>,
+    pub follow_up: Option<String>,
+    pub next_visit_date: Option<String>,
+    pub notes: Option<String>,
+    pub created_by: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// A purchase made from a supplier, optionally created from a reminder list.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SupplierPurchase {
+    pub id: String,
+    pub business_id: String,
+    pub supplier_id: String,
+    pub purchase_number: String,
+    pub purchase_date: String,
+    pub reminder_list_id: Option<String>,
+    pub notes: Option<String>,
+    pub created_by: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// A line item on a supplier purchase.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SupplierPurchaseItem {
+    pub id: String,
+    pub purchase_id: String,
+    pub product_id: String,
+    pub quantity: f64,
+    pub unit_price: f64,
+    pub line_total: f64,
+    pub reminder_item_id: Option<String>,
+}
