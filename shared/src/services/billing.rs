@@ -345,6 +345,7 @@ mod tests {
             description: String::new(),
             hsn_code: String::new(),
             barcode: None,
+            unit: "pcs".into(),
             price,
             gst_rate: gst,
             stock: 100.0,

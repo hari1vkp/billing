@@ -1,6 +1,6 @@
 """Owner-only supplier management API."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from app.schemas.common import MessageResponse, Paginated
 from app.schemas.supplier import (
     CategoryDiscovery,
     ConvertToPurchaseIn,
+    QuickSaveIn,
     ReminderItemCreate,
     ReminderItemOut,
     ReminderItemUpdate,
@@ -20,6 +21,7 @@ from app.schemas.supplier import (
     SupplierCreate,
     SupplierDetail,
     SupplierListOut,
+    SupplierProductCardOut,
     SupplierProductCreate,
     SupplierProductOut,
     SupplierProductUpdate,
@@ -41,6 +43,12 @@ def _not_found(exc: Exception) -> HTTPException:
 
 def _invalid(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+def _invalid_relationship(exc: Exception) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -123,16 +131,26 @@ def list_reminder_items(
 def add_reminder_item(
     list_id: str,
     data: ReminderItemCreate,
+    response: Response,
     user: User = Depends(require_owner),
     db: Session = Depends(get_db),
 ):
     try:
+        # A duplicate product_id returns the existing item unchanged (200).
+        existing = supplier_service.find_existing_reminder_item(
+            db, user.business_id, list_id, data.product_id
+        )
+        if existing is not None:
+            response.status_code = status.HTTP_200_OK
+            return supplier_service.reminder_item_out(existing)
         item = supplier_service.add_reminder_item(
             db, user.business_id, list_id, data, user.id
         )
         return supplier_service.reminder_item_out(item)
     except supplier_service.NotFoundError as exc:
         raise _not_found(exc)
+    except supplier_service.RelationshipError as exc:
+        raise _invalid_relationship(exc)
     except supplier_service.ValidationError as exc:
         raise _invalid(exc)
 
@@ -152,6 +170,8 @@ def update_reminder_item(
         return supplier_service.reminder_item_out(item)
     except supplier_service.NotFoundError as exc:
         raise _not_found(exc)
+    except supplier_service.RelationshipError as exc:
+        raise _invalid_relationship(exc)
     except supplier_service.ValidationError as exc:
         raise _invalid(exc)
 
@@ -191,6 +211,37 @@ def convert_to_purchase(
         raise _invalid(exc)
     except supplier_service.ConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+@router.delete("/reminders/{list_id}", response_model=MessageResponse)
+def delete_reminder_list(
+    list_id: str,
+    user: User = Depends(require_owner),
+    db: Session = Depends(get_db),
+):
+    try:
+        supplier_service.delete_reminder_list(db, user.business_id, list_id, user.id)
+    except supplier_service.NotFoundError as exc:
+        raise _not_found(exc)
+    return MessageResponse(message="Reminder list deleted")
+
+
+@router.post(
+    "/reminders/{list_id}/carry-forward",
+    response_model=ReminderListOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def carry_forward_reminder_list(
+    list_id: str,
+    user: User = Depends(require_owner),
+    db: Session = Depends(get_db),
+):
+    try:
+        return supplier_service.carry_forward_reminder_list(
+            db, user.business_id, list_id, user.id
+        )
+    except supplier_service.NotFoundError as exc:
+        raise _not_found(exc)
 
 
 # -- supplier detail / update / deactivate ---------------------------------
@@ -239,7 +290,7 @@ def deactivate_supplier(
 
 
 # -- supplier-product links -------------------------------------------------
-@router.get("/{supplier_id}/products", response_model=list[SupplierProductOut])
+@router.get("/{supplier_id}/products", response_model=list[SupplierProductCardOut])
 def list_supplier_products(
     supplier_id: str,
     user: User = Depends(require_owner),
@@ -247,7 +298,7 @@ def list_supplier_products(
 ):
     try:
         return [
-            supplier_service.supplier_product_out(link)
+            supplier_service.supplier_product_card_out(db, link)
             for link in supplier_service.list_supplier_products(
                 db, user.business_id, supplier_id
             )
@@ -332,6 +383,29 @@ def create_reminder_list(
         return supplier_service.reminder_list_out(db, reminder_list)
     except supplier_service.NotFoundError as exc:
         raise _not_found(exc)
+
+
+@router.post(
+    "/{supplier_id}/reminders/quick-save",
+    response_model=ReminderListOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def quick_save_reminder(
+    supplier_id: str,
+    data: QuickSaveIn,
+    user: User = Depends(require_owner),
+    db: Session = Depends(get_db),
+):
+    try:
+        return supplier_service.quick_save_reminder(
+            db, user.business_id, supplier_id, data, user.id
+        )
+    except supplier_service.NotFoundError as exc:
+        raise _not_found(exc)
+    except supplier_service.RelationshipError as exc:
+        raise _invalid_relationship(exc)
+    except supplier_service.ValidationError as exc:
+        raise _invalid(exc)
 
 
 @router.get("/{supplier_id}/reminders", response_model=list[ReminderListOut])

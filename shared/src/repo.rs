@@ -74,6 +74,7 @@ fn product_from_row(row: &Row<'_>) -> rusqlite::Result<Product> {
         description: rs(row, "description")?,
         hsn_code: rs(row, "hsn_code")?,
         barcode: ro(row, "barcode")?,
+        unit: rs(row, "unit")?,
         price: row.get("price")?,
         gst_rate: row.get("gst_rate")?,
         stock: row.get("stock")?,

@@ -15,6 +15,7 @@ def _round_money(value) -> float:
 
 class ProductBase(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+    unit: str = Field(default="pcs", min_length=1, max_length=32)
     sku: str | None = Field(default=None, max_length=50)
     barcode: str | None = Field(default=None, max_length=64)
     description: str | None = None
@@ -43,6 +44,7 @@ class ProductCreate(ProductBase):
 
 class ProductUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
+    unit: str | None = Field(default=None, min_length=1, max_length=32)
     sku: str | None = None
     barcode: str | None = Field(default=None, max_length=64)
     description: str | None = None
@@ -63,6 +65,7 @@ class ProductOut(ORMModel):
     id: str
     business_id: str
     name: str
+    unit: str = "pcs"
     sku: str | None = None
     barcode: str | None = None
     description: str | None = None

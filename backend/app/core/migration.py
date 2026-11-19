@@ -79,6 +79,14 @@ def run_migrations(engine: Engine) -> None:
                         "NUMERIC(5,2) NOT NULL DEFAULT 0"
                     )
                 )
+            if "unit" not in columns:
+                logger.info("Migration: adding products.unit")
+                conn.execute(
+                    text(
+                        "ALTER TABLE products ADD COLUMN unit "
+                        "VARCHAR(32) NOT NULL DEFAULT 'pcs'"
+                    )
+                )
             # create_all only creates this index when it creates the table; for
             # a pre-existing products table we create it explicitly here.
             conn.execute(
@@ -154,6 +162,7 @@ def run_migrations(engine: Engine) -> None:
                 "supplier_id": "VARCHAR(36) NOT NULL DEFAULT ''",
                 "product_id": "VARCHAR(36)",
                 "custom_name": "VARCHAR(200)",
+                "unit": "VARCHAR(32)",
                 "supplier_sku": "VARCHAR(80)",
                 "supplier_price": "NUMERIC(14,2)",
                 "notes": "TEXT",

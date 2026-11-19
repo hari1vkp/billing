@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import {
   ArrowUpRight,
   CalendarDays,
+  Check,
   CheckCircle2,
   ClipboardList,
   Info,
@@ -45,6 +46,7 @@ import type {
   MessageResponse,
   Paginated,
   Product,
+  QuickReminderPayload,
   SupplierPurchaseConversion,
   PurchaseReminderItem,
   PurchaseReminderItemInput,
@@ -560,44 +562,287 @@ function ProductsTab({
 }
 
 /* ------------------------------------------------------------------ */
+/* Purchase reminder helpers & building blocks                          */
+/* ------------------------------------------------------------------ */
+
+/** Accept the response shapes the supplier-products endpoint may use. */
+function toArray<T>(response: unknown): T[] {
+  if (Array.isArray(response)) return response as T[];
+  if (response && typeof response === 'object') {
+    const record = response as Record<string, unknown>;
+    for (const key of ['items', 'data', 'products']) {
+      if (Array.isArray(record[key])) return record[key] as T[];
+    }
+  }
+  return [];
+}
+
+function cardName(card: SupplierProduct): string {
+  return card.product_name || card.custom_name || card.product_sku || 'Untitled product';
+}
+
+/** Stable identity for selection/deduplication: the product, not the link row. */
+function cardKey(card: SupplierProduct): string {
+  return card.product_id || card.id;
+}
+
+/** Effective unit for a supplier card: supplier override first, product unit next. */
+function cardUnit(card: SupplierProduct): string {
+  return (card.unit || card.product_unit || 'pcs').trim() || 'pcs';
+}
+
+type SelectedProduct = {
+  card: SupplierProduct;
+  quantity: string;
+  unit: string;
+  expectedPrice: string;
+  notes: string;
+};
+
+/** Compact, clickable card for a product linked to the current supplier. */
+function SupplierProductCardGrid({
+  products,
+  selectedIds,
+  onToggle,
+}: {
+  products: SupplierProduct[];
+  selectedIds: string[];
+  onToggle: (card: SupplierProduct) => void;
+}) {
+  return (
+    <div className="supplier-card-grid">
+      {products.map((card) => {
+        const isSelected = selectedIds.includes(cardKey(card));
+        const brandCategory = [card.product_brand, card.product_category].filter(Boolean).join(' · ');
+        const variantSize = [card.product_variant, card.product_size_pack].filter(Boolean).join(' · ');
+        return (
+          <button
+            type="button"
+            key={card.id}
+            aria-pressed={isSelected}
+            className={
+              isSelected ? 'supplier-product-card supplier-product-card--selected' : 'supplier-product-card'
+            }
+            onClick={() => onToggle(card)}
+          >
+            <span className="supplier-card__name">{cardName(card)}</span>
+            {brandCategory && <span className="supplier-card__meta">{brandCategory}</span>}
+            {variantSize && <span className="supplier-card__variant">{variantSize}</span>}
+            <span className="supplier-card__footer">
+              <span className="supplier-card__unit">{cardUnit(card)}</span>
+              {isSelected && (
+                <span className="supplier-card__selected">
+                  <Check size={12} /> Selected
+                </span>
+              )}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** One product in the new-reminder panel, with all fields editable inline. */
+function SelectedProductRow({
+  selected,
+  currency,
+  onChange,
+  onRemove,
+}: {
+  selected: SelectedProduct;
+  currency: string;
+  onChange: (id: string, field: keyof SelectedProduct, value: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  const id = cardKey(selected.card);
+  return (
+    <div className="supplier-selected-row">
+      <div className="supplier-selected-row__head">
+        <strong className="supplier-selected-row__name">{cardName(selected.card)}</strong>
+        <button type="button" className="icon-btn" aria-label={`Remove ${cardName(selected.card)}`}
+          onClick={() => onRemove(id)}>
+          <Trash2 size={14} />
+        </button>
+      </div>
+      <div className="reminder-fields">
+        <label className="reminder-field">
+          <span>Qty</span>
+          <Input type="number" min="0.001" step="0.001" value={selected.quantity}
+            onChange={(event) => onChange(id, 'quantity', event.target.value)} />
+        </label>
+        <label className="reminder-field">
+          <span>Unit</span>
+          <Input value={selected.unit} placeholder="pcs, boxes, kg…"
+            onChange={(event) => onChange(id, 'unit', event.target.value)} />
+        </label>
+        <label className="reminder-field">
+          <span>Expected price ({currency})</span>
+          <Input type="number" min="0" step="0.01" value={selected.expectedPrice} placeholder="optional"
+            onChange={(event) => onChange(id, 'expectedPrice', event.target.value)} />
+        </label>
+        <label className="reminder-field reminder-field--notes">
+          <span>Notes</span>
+          <Input value={selected.notes} placeholder="optional"
+            onChange={(event) => onChange(id, 'notes', event.target.value)} />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+/** One item of a saved list. Every field saves in place through the item PATCH. */
+function ReminderItemRow({
+  item,
+  currency,
+  onPatch,
+  onTogglePurchased,
+  onRemove,
+}: {
+  item: PurchaseReminderItem;
+  currency: string;
+  onPatch: (item: PurchaseReminderItem, patch: PurchaseReminderItemInput) => Promise<boolean>;
+  onTogglePurchased: (item: PurchaseReminderItem) => void;
+  onRemove: (item: PurchaseReminderItem) => void;
+}) {
+  const toast = useToast();
+  const [quantity, setQuantity] = useState(String(item.quantity));
+  const [unit, setUnit] = useState(item.unit ?? '');
+  const [expectedPrice, setExpectedPrice] = useState(
+    item.expected_price != null ? String(item.expected_price) : '',
+  );
+  const [notes, setNotes] = useState(item.notes ?? '');
+
+  useEffect(() => {
+    setQuantity(String(item.quantity));
+    setUnit(item.unit ?? '');
+    setExpectedPrice(item.expected_price != null ? String(item.expected_price) : '');
+    setNotes(item.notes ?? '');
+  }, [item]);
+
+  async function commit(patch: PurchaseReminderItemInput, reset: () => void) {
+    const ok = await onPatch(item, patch);
+    if (!ok) reset();
+  }
+
+  return (
+    <div className={item.is_purchased ? 'reminder-item-row reminder-item-row--done' : 'reminder-item-row'}>
+      <div className="reminder-item-row__head">
+        <div className="reminder-item-row__title">
+          <strong>{item.product_name || item.name}</strong>
+          {item.product_id && <small className="cell-sub">Existing BillFlow product</small>}
+          {!item.product_id && <small className="cell-sub">Custom name — not in inventory</small>}
+        </div>
+        <div className="reminder-item-row__tools">
+          <label className="reminder-check">
+            <input type="checkbox" checked={item.is_purchased}
+              onChange={() => onTogglePurchased(item)} />
+            {item.is_purchased ? 'Purchased' : 'Pending'}
+          </label>
+          <button type="button" className="icon-btn" aria-label="Remove item"
+            onClick={() => onRemove(item)}>
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="reminder-fields">
+        <label className="reminder-field">
+          <span>Qty</span>
+          <Input type="number" min="0.001" step="0.001" value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+            onBlur={() => {
+              const value = Number(quantity);
+              if (!(value > 0)) {
+                setQuantity(String(item.quantity));
+                toast.error('Quantity must be greater than 0.');
+                return;
+              }
+              if (value === Number(item.quantity)) return;
+              void commit({ quantity: value }, () => setQuantity(String(item.quantity)));
+            }} />
+        </label>
+        <label className="reminder-field">
+          <span>Unit</span>
+          <Input value={unit} placeholder="pcs, boxes, kg…"
+            onChange={(event) => setUnit(event.target.value)}
+            onBlur={() => {
+              const value = unit.trim() || null;
+              if (value === (item.unit || null)) return;
+              void commit({ unit: value }, () => setUnit(item.unit ?? ''));
+            }} />
+        </label>
+        <label className="reminder-field">
+          <span>Expected price ({currency})</span>
+          <Input type="number" min="0" step="0.01" value={expectedPrice} placeholder="optional"
+            onChange={(event) => setExpectedPrice(event.target.value)}
+            onBlur={() => {
+              const raw = expectedPrice.trim();
+              if (raw === '' || Number.isNaN(Number(raw))) {
+                if ((item.expected_price ?? null) === null) return;
+                void commit({ expected_price: null }, () =>
+                  setExpectedPrice(item.expected_price != null ? String(item.expected_price) : ''));
+                return;
+              }
+              const value = Number(raw);
+              if (value === item.expected_price) return;
+              void commit({ expected_price: value }, () =>
+                setExpectedPrice(item.expected_price != null ? String(item.expected_price) : ''));
+            }} />
+        </label>
+        <label className="reminder-field reminder-field--notes">
+          <span>Notes</span>
+          <Input value={notes} placeholder="optional"
+            onChange={(event) => setNotes(event.target.value)}
+            onBlur={() => {
+              const value = notes.trim() || null;
+              if (value === (item.notes || null)) return;
+              void commit({ notes: value }, () => setNotes(item.notes ?? ''));
+            }} />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Purchase reminders tab                                              */
 /* ------------------------------------------------------------------ */
 
 function RemindersTab({
   supplierId,
+  supplierName,
   lists,
-  catalog,
   currency,
   reload,
   onChanged,
+  onGoToProducts,
 }: {
   supplierId: string;
+  supplierName: string;
   lists: PurchaseReminderList[];
-  catalog: Product[];
   currency: string;
   reload: () => Promise<void>;
   onChanged: () => void;
+  onGoToProducts: () => void;
 }) {
   const toast = useToast();
+
+  const [cards, setCards] = useState<SupplierProduct[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(true);
   const [newTitle, setNewTitle] = useState('');
   const [newNotes, setNewNotes] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(lists[0]?.id ?? null);
+  const [selected, setSelected] = useState<SelectedProduct[]>([]);
+  const [saving, setSaving] = useState(false);
 
+  const [selectedId, setSelectedId] = useState<string | null>(lists[0]?.id ?? null);
   const [itemsByList, setItemsByList] = useState<Record<string, PurchaseReminderItem[]>>({});
-  const [itemFormOpen, setItemFormOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<PurchaseReminderItem | null>(null);
-  const [itemForm, setItemForm] = useState<PurchaseReminderItemInput & { product_id: string }>({
-    product_id: '',
-    custom_name: '',
-    name: '',
-    quantity: 1,
-    unit: '',
-    expected_price: null,
-    notes: '',
-  });
-  const [itemSaving, setItemSaving] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addSelectedIds, setAddSelectedIds] = useState<string[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [carryingId, setCarryingId] = useState<string | null>(null);
+  const [deletingList, setDeletingList] = useState<PurchaseReminderList | null>(null);
   const [deletingItem, setDeletingItem] = useState<PurchaseReminderItem | null>(null);
+  const [itemSaving, setItemSaving] = useState(false);
 
   const [convertList, setConvertList] = useState<PurchaseReminderList | null>(null);
   const [convertForm, setConvertForm] = useState({
@@ -607,6 +852,30 @@ function RemindersTab({
   });
   const [converting, setConverting] = useState(false);
   const [result, setResult] = useState<SupplierPurchaseConversion | null>(null);
+
+  // Load ONLY this supplier's linked products. Changing supplier clears every
+  // selection so a product from another supplier can never leak into a reminder.
+  useEffect(() => {
+    let active = true;
+    setCardsLoading(true);
+    setCards([]);
+    setSelected([]);
+    setAddOpen(false);
+    setAddSelectedIds([]);
+    void api
+      .get<unknown>(`/suppliers/${supplierId}/products`)
+      .then((response) => { if (active) setCards(toArray<SupplierProduct>(response)); })
+      .catch(() => { if (active) toast.error('Could not load the supplier products.'); })
+      .finally(() => { if (active) setCardsLoading(false); });
+    return () => { active = false; };
+  }, [supplierId, toast]);
+
+  // Only real product links can be saved by quick-save (it requires a product_id).
+  const linkedProducts = useMemo(
+    () => cards.filter((card) => Boolean(card.product_id)),
+    [cards],
+  );
+  const selectedIds = useMemo(() => selected.map((entry) => cardKey(entry.card)), [selected]);
 
   useEffect(() => {
     if (!selectedId && lists.length) setSelectedId(lists[0].id);
@@ -631,10 +900,8 @@ function RemindersTab({
     void Promise.all(
       missing.map(async (list) => {
         try {
-          const response = await api.get<
-            PurchaseReminderItem[] | Paginated<PurchaseReminderItem>
-          >(`/suppliers/reminders/${list.id}/items`);
-          return [list.id, Array.isArray(response) ? response : response.items] as const;
+          const response = await api.get<unknown>(`/suppliers/reminders/${list.id}/items`);
+          return [list.id, toArray<PurchaseReminderItem>(response)] as const;
         } catch {
           return [list.id, [] as PurchaseReminderItem[]] as const;
         }
@@ -645,106 +912,96 @@ function RemindersTab({
     return () => { active = false; };
   }, [lists]);
 
-  useEffect(() => {
-    if (!itemFormOpen) return;
-    setItemForm(
-      editingItem
-        ? {
-            product_id: editingItem.product_id ?? '',
-            custom_name: '',
-            name: editingItem.name,
-            quantity: editingItem.quantity,
-            unit: editingItem.unit ?? '',
-            expected_price: editingItem.expected_price ?? null,
-            notes: editingItem.notes ?? '',
-          }
-        : {
-            product_id: '',
-            custom_name: '',
-            name: '',
-            quantity: 1,
-            unit: '',
-            expected_price: null,
-            notes: '',
-          },
-    );
-  }, [itemFormOpen, editingItem]);
-
   const selectedList = lists.find((list) => list.id === selectedId) ?? null;
   const items = selectedList ? (itemsByList[selectedList.id] ?? selectedList.items ?? []) : [];
   const pendingCount = items.filter((item) => !item.is_purchased).length;
 
-  async function createList(event: FormEvent) {
+  function togglePick(card: SupplierProduct) {
+    setSelected((prev) => {
+      const exists = prev.some((entry) => cardKey(entry.card) === cardKey(card));
+      if (exists) return prev.filter((entry) => cardKey(entry.card) !== cardKey(card));
+      return [...prev, {
+        card,
+        quantity: '1',
+        unit: cardUnit(card),
+        expectedPrice: '',
+        notes: '',
+      }];
+    });
+  }
+
+  function updateSelected(id: string, field: keyof SelectedProduct, value: string) {
+    setSelected((prev) => prev.map((entry) =>
+      cardKey(entry.card) === id ? { ...entry, [field]: value } : entry,
+    ));
+  }
+
+  async function saveQuickReminder(event: FormEvent) {
     event.preventDefault();
-    if (!newTitle.trim()) {
-      toast.error('Give the reminder list a title.');
+    const title = newTitle.trim();
+    if (!title) {
+      toast.error('Give the reminder a title.');
       return;
     }
-    setCreating(true);
+    if (!selected.length) {
+      toast.error('Select at least one product first.');
+      return;
+    }
+
+    // Local relationship check: every selected id must still belong to this supplier.
+    const validIds = new Set(linkedProducts.map((card) => card.product_id as string));
+    const invalid = selected.find((entry) =>
+      !entry.card.product_id || !validIds.has(entry.card.product_id));
+    if (invalid) {
+      toast.error('A selected product is no longer linked to this supplier. Review your selection.');
+      setSelected([]);
+      return;
+    }
+    const badQuantity = selected.find((entry) => !(Number(entry.quantity) > 0));
+    if (badQuantity) {
+      toast.error('Enter a quantity greater than 0 for every product.');
+      return;
+    }
+
+    const payload: QuickReminderPayload = {
+      title,
+      notes: newNotes.trim() || undefined,
+      items: selected.map((entry) => {
+        const price = Number(entry.expectedPrice);
+        return {
+          product_id: entry.card.product_id as string,
+          quantity: Number(entry.quantity),
+          unit: entry.unit.trim() || cardUnit(entry.card),
+          expected_price:
+            entry.expectedPrice.trim() !== '' && Number.isFinite(price) ? price : undefined,
+          notes: entry.notes.trim() || undefined,
+        };
+      }),
+    };
+
+    setSaving(true);
     try {
-      const created = await api.post<PurchaseReminderList>(`/suppliers/${supplierId}/reminders`, {
-        title: newTitle.trim(),
-        notes: newNotes.trim() || undefined,
-      });
+      const created = await api.post<PurchaseReminderList>(
+        `/suppliers/${supplierId}/reminders/quick-save`,
+        payload,
+      );
+      toast.success('Reminder saved.');
       setNewTitle('');
       setNewNotes('');
-      setSelectedId(created.id);
-      toast.success('Reminder list created.');
+      setSelected([]);
+      if (created?.id) setSelectedId(created.id);
       await reload();
     } catch (error) {
-      toast.error(errorMessage(error, 'Could not create the reminder list.'));
+      toast.error(errorMessage(error, 'Could not save the reminder.'));
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   }
 
-  async function saveItem(event: FormEvent) {
-    event.preventDefault();
-    if (!selectedList) return;
-    const product = catalog.find((entry) => entry.id === itemForm.product_id);
-    const name = product?.name || (itemForm.product_id ? '' : (itemForm.custom_name ?? '').trim());
-    if (!name) {
-      toast.error('Choose an existing product or enter a custom name.');
-      return;
-    }
-    const price = itemForm.expected_price;
-    const payload: PurchaseReminderItemInput = {
-      name,
-      product_id: product?.id ?? null,
-      quantity: Number(itemForm.quantity) || 0,
-      unit: (itemForm.unit ?? '').trim() || undefined,
-      expected_price:
-        price === null || price === undefined || Number.isNaN(Number(price))
-          ? undefined
-          : Number(price),
-      notes: (itemForm.notes ?? '').trim() || undefined,
-    };
-    setItemSaving(true);
-    try {
-      if (editingItem) {
-        await patchOrDelete<void>(
-          [
-            `/suppliers/reminders/items/${editingItem.id}`,
-            `/suppliers/reminders/${editingItem.list_id}/items/${editingItem.id}`,
-          ],
-          'patch',
-          payload,
-        );
-        toast.success('Reminder item updated.');
-      } else {
-        await api.post(`/suppliers/reminders/${selectedList.id}/items`, payload);
-        toast.success('Item added to the reminder list.');
-      }
-      setItemFormOpen(false);
-      await reload();
-    } catch (error) {
-      toast.error(errorMessage(error, 'Could not save the reminder item.'));
-    } finally {
-      setItemSaving(false);
-    }
-  }
-
-  async function togglePurchased(item: PurchaseReminderItem) {
+  async function patchItem(
+    item: PurchaseReminderItem,
+    patch: PurchaseReminderItemInput,
+  ): Promise<boolean> {
     try {
       await patchOrDelete<void>(
         [
@@ -752,11 +1009,60 @@ function RemindersTab({
           `/suppliers/reminders/${item.list_id}/items/${item.id}`,
         ],
         'patch',
-        { is_purchased: !item.is_purchased },
+        patch,
       );
       await reload();
+      return true;
     } catch (error) {
       toast.error(errorMessage(error, 'Could not update the item.'));
+      return false;
+    }
+  }
+
+  const existingProductIds = useMemo(
+    () => new Set(items.map((item) => item.product_id).filter(Boolean) as string[]),
+    [items],
+  );
+  const addableProducts = useMemo(
+    () => linkedProducts.filter((card) => !existingProductIds.has(card.product_id as string)),
+    [linkedProducts, existingProductIds],
+  );
+
+  function toggleAddPick(card: SupplierProduct) {
+    const key = cardKey(card);
+    setAddSelectedIds((prev) =>
+      prev.includes(key) ? prev.filter((id) => id !== key) : [...prev, key],
+    );
+  }
+
+  async function addPickedProducts() {
+    if (!selectedList || !addSelectedIds.length) return;
+    const picks = addableProducts.filter((card) => addSelectedIds.includes(cardKey(card)));
+    if (!picks.length) return;
+    setAdding(true);
+    try {
+      await Promise.all(
+        picks.map((card) =>
+          api.post(`/suppliers/reminders/${selectedList.id}/items`, {
+            product_id: card.product_id,
+            name: cardName(card),
+            quantity: 1,
+            unit: cardUnit(card),
+          }),
+        ),
+      );
+      toast.success(
+        picks.length === 1
+          ? 'Product added to the reminder.'
+          : `${picks.length} products added to the reminder.`,
+      );
+      setAddSelectedIds([]);
+      setAddOpen(false);
+      await reload();
+    } catch (error) {
+      toast.error(errorMessage(error, 'Could not add the products.'));
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -776,6 +1082,36 @@ function RemindersTab({
       await reload();
     } catch (error) {
       toast.error(errorMessage(error, 'Could not remove the item.'));
+    } finally {
+      setItemSaving(false);
+    }
+  }
+
+  async function carryForward(list: PurchaseReminderList) {
+    setCarryingId(list.id);
+    try {
+      await api.post(`/suppliers/reminders/${list.id}/carry-forward`);
+      toast.success('Unfinished items carried forward to a new list.');
+      await reload();
+    } catch (error) {
+      toast.error(errorMessage(error, 'Could not carry the items forward.'));
+    } finally {
+      setCarryingId(null);
+    }
+  }
+
+  async function deleteList() {
+    if (!deletingList) return;
+    const deletedId = deletingList.id;
+    setItemSaving(true);
+    try {
+      await api.delete(`/suppliers/reminders/${deletedId}`);
+      toast.success('Reminder list deleted.');
+      setDeletingList(null);
+      if (selectedId === deletedId) setSelectedId(null);
+      await reload();
+    } catch (error) {
+      toast.error(errorMessage(error, 'Could not delete the reminder list.'));
     } finally {
       setItemSaving(false);
     }
@@ -807,180 +1143,207 @@ function RemindersTab({
 
   return (
     <div className="supplier-panel">
-      <div className="supplier-note">
-        <Info size={15} />
-        <span>
-          Tick items you have already bought so they are easy to spot on your next visit.{' '}
-          <strong>Marking purchased does not change stock.</strong> Use{' '}
-          <strong>Convert to purchase</strong> to actually receive the goods into inventory.
-          Unticked items stay visible and carry forward to the next visit.
+      <div className="reminder-supplier-head">
+        <h4>Purchase reminders for {supplierName}</h4>
+        <span className="supplier-help">
+          Build a reminder from this supplier’s linked products, then save it for your next visit.
         </span>
       </div>
 
-      <form className="supplier-create-list" onSubmit={createList}>
-        <Input value={newTitle} onChange={(event) => setNewTitle(event.target.value)}
-          placeholder="New reminder list title (e.g. weekly restock)" aria-label="Reminder list title" />
-        <Input value={newNotes} onChange={(event) => setNewNotes(event.target.value)}
-          placeholder="Notes (optional)" aria-label="Reminder list notes" />
-        <Button type="submit" size="sm" icon={<Plus size={14} />} loading={creating}>
-          Create list
-        </Button>
-      </form>
+      <div className="supplier-note">
+        <Info size={15} />
+        <span>
+          Saving or ticking a reminder <strong>does not change stock</strong>. Goods are only
+          received into inventory when you use <strong>Convert to purchase</strong>, which follows
+          the normal purchase workflow. Unticked items stay pending and can be carried forward.
+        </span>
+      </div>
 
-      {lists.length ? (
-        <>
-          <div className="supplier-list-tabs" role="tablist" aria-label="Reminder lists">
-            {lists.map((list) => (
-              <button key={list.id} type="button" role="tab"
-                aria-selected={list.id === selectedId}
-                className={list.id === selectedId ? 'supplier-list-tab supplier-list-tab--active' : 'supplier-list-tab'}
-                onClick={() => setSelectedId(list.id)}>
-                {list.title}
-                <Badge tone={list.status === 'converted' ? 'success' : 'warning'} dot>
-                  {list.status === 'converted' ? 'Converted' : 'Pending'}
-                </Badge>
-              </button>
-            ))}
-          </div>
+      <div className="reminder-compose">
+        <div className="section-heading-row">
+          <h4>New reminder</h4>
+          <span className="supplier-help">Only products linked to {supplierName} can be selected.</span>
+        </div>
+        <div className="reminder-compose__titles">
+          <Input value={newTitle} onChange={(event) => setNewTitle(event.target.value)}
+            placeholder="Reminder title (e.g. weekly restock)" aria-label="Reminder title" />
+          <Input value={newNotes} onChange={(event) => setNewNotes(event.target.value)}
+            placeholder="Notes (optional)" aria-label="Reminder notes" />
+        </div>
 
-          {selectedList && (
-            <div className="supplier-list-body">
-              <div className="section-heading-row">
-                <h4>{selectedList.title}</h4>
-                <div className="supplier-inline-actions">
-                  <Button size="sm" variant="secondary" icon={<Plus size={14} />}
-                    onClick={() => { setEditingItem(null); setItemFormOpen(true); }}>
-                    Add item
-                  </Button>
-                  <Button size="sm" icon={<CheckCircle2 size={14} />}
-                    disabled={selectedList.status === 'converted'}
-                    onClick={() => {
-                      setConvertForm({ purchase_date: todayInput(), notes: '', only_purchased: true });
-                      setConvertList(selectedList);
-                    }}>
-                    Convert to purchase
-                  </Button>
-                </div>
-              </div>
-              {selectedList.notes && <p className="supplier-help">{selectedList.notes}</p>}
-              <p className="supplier-help">
-                {pendingCount} pending · {items.length} item{items.length === 1 ? '' : 's'} on this list.
-              </p>
-
-              {items.length ? (
-                <div className="table-scroll">
-                  <table className="data-table data-table--compact supplier-table">
-                    <thead>
-                      <tr>
-                        <th>Item</th>
-                        <th className="text-right">Qty</th>
-                        <th>Unit</th>
-                        <th className="text-right">Expected price</th>
-                        <th>Purchased</th>
-                        <th aria-label="Actions" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item) => (
-                        <tr key={item.id} className={item.is_purchased ? 'supplier-item--done' : ''}>
-                          <td data-label="Item">
-                            <strong>{item.product_name || item.name}</strong>
-                            {item.product_id && <small className="cell-sub">Existing BillFlow product</small>}
-                            {!item.product_id && <small className="cell-sub">Custom name — not in inventory</small>}
-                            {item.notes && <small className="cell-sub">{item.notes}</small>}
-                          </td>
-                          <td data-label="Qty" className="text-right">{item.quantity}</td>
-                          <td data-label="Unit">{item.unit || '—'}</td>
-                          <td data-label="Expected price" className="text-right">
-                            {item.expected_price != null ? money(item.expected_price, currency) : '—'}
-                          </td>
-                          <td data-label="Purchased">
-                            <Checkbox checked={item.is_purchased}
-                              onChange={() => void togglePurchased(item)}
-                              label={item.is_purchased ? 'Purchased' : 'Pending'} />
-                          </td>
-                          <td data-label="Actions" className="supplier-row-actions">
-                            <button type="button" className="icon-btn" aria-label="Edit item"
-                              onClick={() => { setEditingItem(item); setItemFormOpen(true); }}>
-                              <Pencil size={14} />
-                            </button>
-                            <button type="button" className="icon-btn" aria-label="Remove item"
-                              onClick={() => setDeletingItem(item)}>
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <EmptyState title="No items yet"
-                  description="Add products to buy on your next supplier visit." icon={<ClipboardList size={22} />}
-                  action={<Button size="sm" icon={<Plus size={14} />}
-                    onClick={() => { setEditingItem(null); setItemFormOpen(true); }}>Add item</Button>} />
-              )}
-            </div>
-          )}
-        </>
-      ) : (
-        <EmptyState title="No reminder lists yet"
-          description="Create a list for each restock or supplier visit, then add the items you need."
-          icon={<ClipboardList size={22} />} />
-      )}
-
-      <Modal
-        open={itemFormOpen}
-        onClose={() => setItemFormOpen(false)}
-        title={editingItem ? 'Edit reminder item' : 'Add a reminder item'}
-        subtitle="Pick an existing product or type a custom name. Units are free text."
-        size="md"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setItemFormOpen(false)}>Cancel</Button>
-            <Button type="submit" form="supplier-reminder-item-form" loading={itemSaving}>
-              {editingItem ? 'Save changes' : 'Add item'}
+        {cardsLoading ? (
+          <Loader label="Loading supplier products…" />
+        ) : linkedProducts.length === 0 ? (
+          <div className="reminder-empty">
+            <p>No products linked to this supplier yet.</p>
+            <Button size="sm" icon={<Package size={14} />} onClick={onGoToProducts}>
+              Go to Products
             </Button>
-          </>
-        }
-      >
-        <form id="supplier-reminder-item-form" onSubmit={saveItem} className="form-stack">
-          <Field label="Item" required hint="Existing product, or a custom name that stays off inventory.">
-            <ProductSourceFields
-              products={catalog}
-              productId={itemForm.product_id}
-              customName={itemForm.custom_name ?? ''}
-              onProductId={(value) => setItemForm((prev) => ({ ...prev, product_id: value }))}
-              onCustomName={(value) => setItemForm((prev) => ({ ...prev, custom_name: value }))}
-            />
-          </Field>
-          <div className="form-grid form-grid--3">
-            <Field label="Quantity">
-              <Input type="number" min="0" step="0.001" value={itemForm.quantity ?? 1}
-                onChange={(event) => setItemForm((prev) => ({
-                  ...prev,
-                  quantity: Number(event.target.value),
-                }))} />
-            </Field>
-            <Field label="Unit" hint="Free text — pcs, boxes, metres, kg…">
-              <Input value={itemForm.unit ?? ''} placeholder="pcs, boxes, metres, kg…"
-                onChange={(event) => setItemForm((prev) => ({ ...prev, unit: event.target.value }))} />
-            </Field>
-            <Field label="Expected price">
-              <Input type="number" min="0" step="0.01" value={itemForm.expected_price ?? ''}
-                placeholder="0.00"
-                onChange={(event) => setItemForm((prev) => ({
-                  ...prev,
-                  expected_price: event.target.value === '' ? null : Number(event.target.value),
-                }))} />
-            </Field>
           </div>
-          <Field label="Notes (optional)">
-            <Textarea rows={2} value={itemForm.notes ?? ''} placeholder="Any details about this item…"
-              onChange={(event) => setItemForm((prev) => ({ ...prev, notes: event.target.value }))} />
-          </Field>
-        </form>
-      </Modal>
+        ) : (
+          <div className="reminder-compose__columns">
+            <div className="reminder-picker">
+              <div className="section-heading-row">
+                <h4>Available products ({linkedProducts.length})</h4>
+              </div>
+              <p className="supplier-help">Click a card to select it. Click again to remove it.</p>
+              <SupplierProductCardGrid
+                products={linkedProducts}
+                selectedIds={selectedIds}
+                onToggle={togglePick}
+              />
+            </div>
+
+            <form className="supplier-selected-panel" onSubmit={saveQuickReminder}>
+              <div className="section-heading-row">
+                <h4>Selected products ({selected.length})</h4>
+              </div>
+              {selected.length === 0 ? (
+                <p className="supplier-help">
+                  Pick a product on the left, then set its quantity and unit here before saving.
+                </p>
+              ) : (
+                <div className="supplier-selected-list">
+                  {selected.map((entry) => (
+                    <SelectedProductRow
+                      key={cardKey(entry.card)}
+                      selected={entry}
+                      currency={currency}
+                      onChange={updateSelected}
+                      onRemove={(id) =>
+                        setSelected((prev) => prev.filter((item) => cardKey(item.card) !== id))
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+              <Button type="submit" icon={<ClipboardList size={15} />} loading={saving} full>
+                Save Reminder
+              </Button>
+            </form>
+          </div>
+        )}
+      </div>
+
+      <div className="reminder-saved">
+        <div className="section-heading-row">
+          <h4>Saved reminders ({lists.length})</h4>
+        </div>
+        {lists.length ? (
+          <>
+            <div className="supplier-list-tabs" role="tablist" aria-label="Reminder lists">
+              {lists.map((list) => (
+                <button key={list.id} type="button" role="tab"
+                  aria-selected={list.id === selectedId}
+                  className={list.id === selectedId ? 'supplier-list-tab supplier-list-tab--active' : 'supplier-list-tab'}
+                  onClick={() => {
+                    setSelectedId(list.id);
+                    setAddOpen(false);
+                    setAddSelectedIds([]);
+                  }}>
+                  {list.title}
+                  <Badge tone={list.status === 'converted' ? 'success' : 'warning'} dot>
+                    {list.status === 'converted' ? 'Converted' : 'Pending'}
+                  </Badge>
+                </button>
+              ))}
+            </div>
+
+            {selectedList && (
+              <div className="supplier-list-body">
+                <div className="section-heading-row">
+                  <h4>{selectedList.title}</h4>
+                  <div className="supplier-inline-actions">
+                    <Button size="sm" variant="secondary" icon={<Plus size={14} />}
+                      onClick={() => {
+                        setAddSelectedIds([]);
+                        setAddOpen((open) => !open);
+                      }}>
+                      {addOpen ? 'Close picker' : 'Add products'}
+                    </Button>
+                    <Button size="sm" variant="secondary" icon={<ArrowUpRight size={14} />}
+                      loading={carryingId === selectedList.id}
+                      disabled={selectedList.status === 'converted' || pendingCount === 0}
+                      onClick={() => void carryForward(selectedList)}>
+                      Carry forward
+                    </Button>
+                    <Button size="sm" variant="ghost" icon={<Trash2 size={14} />}
+                      onClick={() => setDeletingList(selectedList)}>
+                      Delete list
+                    </Button>
+                    <Button size="sm" icon={<CheckCircle2 size={14} />}
+                      disabled={selectedList.status === 'converted'}
+                      onClick={() => {
+                        setConvertForm({ purchase_date: todayInput(), notes: '', only_purchased: true });
+                        setConvertList(selectedList);
+                      }}>
+                      Convert to purchase
+                    </Button>
+                  </div>
+                </div>
+                {selectedList.notes && <p className="supplier-help">{selectedList.notes}</p>}
+                <p className="supplier-help">
+                  {pendingCount} pending · {items.length} item{items.length === 1 ? '' : 's'} on this
+                  list. Quantities and units can be edited in place.
+                </p>
+
+                {addOpen && (
+                  <div className="reminder-add-panel">
+                    {addableProducts.length ? (
+                      <>
+                        <p className="supplier-help">
+                          Choose products linked to {supplierName} to add to this list.
+                        </p>
+                        <SupplierProductCardGrid
+                          products={addableProducts}
+                          selectedIds={addSelectedIds}
+                          onToggle={toggleAddPick}
+                        />
+                        <Button size="sm" icon={<Plus size={14} />} loading={adding}
+                          disabled={!addSelectedIds.length}
+                          onClick={() => void addPickedProducts()}>
+                          Add selected ({addSelectedIds.length})
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="supplier-help">
+                        All of this supplier’s linked products are already on this list.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {items.length ? (
+                  <div className="reminder-item-list">
+                    {items.map((item) => (
+                      <ReminderItemRow
+                        key={item.id}
+                        item={item}
+                        currency={currency}
+                        onPatch={patchItem}
+                        onTogglePurchased={(target) =>
+                          void patchItem(target, { is_purchased: !target.is_purchased })
+                        }
+                        onRemove={(target) => setDeletingItem(target)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState title="No items yet"
+                    description="Add products from this supplier to the reminder."
+                    icon={<ClipboardList size={22} />}
+                    action={<Button size="sm" icon={<Plus size={14} />}
+                      onClick={() => setAddOpen(true)}>Add products</Button>} />
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <EmptyState title="No reminder lists yet"
+            description="Use Save Reminder above to create your first list from this supplier’s products."
+            icon={<ClipboardList size={22} />} />
+        )}
+      </div>
 
       <ConfirmDialog
         open={Boolean(deletingItem)}
@@ -989,6 +1352,17 @@ function RemindersTab({
         title="Remove this item?"
         description="The item will be removed from this reminder list. No stock is changed."
         confirmLabel="Remove item"
+        danger
+        loading={itemSaving}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deletingList)}
+        onClose={() => setDeletingList(null)}
+        onConfirm={() => void deleteList()}
+        title="Delete this reminder list?"
+        description="The list and all of its items will be removed. No stock is changed."
+        confirmLabel="Delete list"
         danger
         loading={itemSaving}
       />
@@ -1027,7 +1401,10 @@ function RemindersTab({
             </Field>
             <Field label="Notes (optional)">
               <Input value={convertForm.notes} placeholder="Purchase reference or remarks"
-                onChange={(event) => setConvertForm((prev) => ({ ...prev, notes: event.target.value }))} />
+                onChange={(event) => setConvertForm((prev) => ({
+                  ...prev,
+                  notes: event.target.value,
+                }))} />
             </Field>
           </div>
           <Checkbox checked={convertForm.only_purchased}
@@ -1074,8 +1451,7 @@ function RemindersTab({
             )}
             {(result?.custom_items_skipped ?? result?.skipped_custom_items) !== undefined && (
               <div className="detail-stat">
-                <span>Custom items in notes</span>
-                <strong>{result?.custom_items_skipped ?? result?.skipped_custom_items}</strong>
+                <span>Custom items in notes</span><strong>{result?.custom_items_skipped ?? result?.skipped_custom_items}</strong>
               </div>
             )}
             {result?.total_amount !== undefined && (
@@ -1390,8 +1766,9 @@ function SupplierProfileDrawer({
             currency={currency} reload={reload} />
         )}
         {tab === 'reminders' && (
-          <RemindersTab supplierId={detail.id} lists={lists} catalog={catalog}
-            currency={currency} reload={reload} onChanged={onChanged} />
+          <RemindersTab key={detail.id} supplierId={detail.id} supplierName={detail.name}
+            lists={lists} currency={currency} reload={reload} onChanged={onChanged}
+            onGoToProducts={() => setTab('products')} />
         )}
         {tab === 'visits' && (
           <VisitsTab supplierId={detail.id} visits={visits} reload={reload} />

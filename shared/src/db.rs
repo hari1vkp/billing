@@ -165,6 +165,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
              name TEXT NOT NULL,
              sku TEXT NOT NULL DEFAULT '',
              description TEXT NOT NULL DEFAULT '',
+             unit TEXT NOT NULL DEFAULT 'pcs',
              hsn_code TEXT NOT NULL DEFAULT '',
              barcode TEXT,
              price REAL NOT NULL DEFAULT 0,
@@ -325,6 +326,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
              custom_name TEXT,
              supplier_sku TEXT,
              supplier_price REAL NOT NULL DEFAULT 0,
+             unit TEXT,
              notes TEXT
          );
          CREATE TABLE IF NOT EXISTS purchase_reminder_lists (
@@ -460,6 +462,18 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         conn.execute_batch(
             "ALTER TABLE invoice_items ADD COLUMN wholesale_discount_percent REAL NOT NULL DEFAULT 0;",
         )?;
+    }
+
+    // Additive upgrade: free-text product unit and optional supplier-product
+    // unit override. Both columns are added only when missing, so existing rows
+    // and repeated migrations are never touched.
+    if !has_column(conn, "products", "unit")? {
+        conn.execute_batch(
+            "ALTER TABLE products ADD COLUMN unit TEXT NOT NULL DEFAULT 'pcs';",
+        )?;
+    }
+    if !has_column(conn, "supplier_products", "unit")? {
+        conn.execute_batch("ALTER TABLE supplier_products ADD COLUMN unit TEXT;")?;
     }
     Ok(())
 }

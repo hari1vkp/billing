@@ -54,6 +54,8 @@ class SupplierProduct(BaseModel):
         ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True
     )
     custom_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Optional per-supplier unit override; falls back to the product's unit.
+    unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
     supplier_sku: Mapped[str | None] = mapped_column(String(80), nullable=True)
     supplier_price: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

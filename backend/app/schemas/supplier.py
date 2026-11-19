@@ -97,6 +97,8 @@ class SupplierListOut(SupplierOut):
 class SupplierProductBase(BaseModel):
     product_id: str | None = Field(default=None, min_length=1)
     custom_name: str | None = Field(default=None, max_length=200)
+    # Per-supplier unit override (VARCHAR(32)); null means "use product unit".
+    unit: str | None = Field(default=None, min_length=1, max_length=32)
     supplier_sku: str | None = Field(default=None, max_length=80)
     supplier_price: float | None = Field(default=None, ge=0)
     notes: str | None = None
@@ -119,6 +121,7 @@ class SupplierProductCreate(SupplierProductBase):
 class SupplierProductUpdate(BaseModel):
     product_id: str | None = Field(default=None, min_length=1)
     custom_name: str | None = None
+    unit: str | None = Field(default=None, min_length=1, max_length=32)
     supplier_sku: str | None = None
     supplier_price: float | None = Field(default=None, ge=0)
     notes: str | None = None
@@ -130,11 +133,29 @@ class SupplierProductOut(ORMModel):
     supplier_id: str
     product_id: str | None = None
     custom_name: str | None = None
+    unit: str | None = None
     supplier_sku: str | None = None
     supplier_price: float | None = None
     notes: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class SupplierProductCardOut(SupplierProductOut):
+    """Enriched supplier-product row for the reminder selection cards.
+
+    Every field is derived from the existing supplier-product link and its
+    product. Brand/category/variant/size come only from product description
+    metadata that was explicitly stored there; they are never invented.
+    """
+
+    product_name: str | None = None
+    product_brand: str | None = None
+    product_category: str | None = None
+    product_variant: str | None = None
+    product_size_pack: str | None = None
+    product_unit: str | None = None
+    unit: str | None = None  # supplier override, else product unit
 
 
 class ReminderListCreate(BaseModel):
@@ -153,10 +174,29 @@ class ReminderListUpdate(BaseModel):
     status: str | None = Field(default=None, pattern="^(pending|converted)$")
 
 
+class QuickSaveItemIn(BaseModel):
+    product_id: str = Field(min_length=1)
+    quantity: float = Field(gt=0)
+    unit: str | None = Field(default=None, min_length=1, max_length=50)
+    expected_price: float | None = Field(default=None, ge=0)
+    notes: str | None = None
+
+
+class QuickSaveIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    notes: str | None = None
+    items: list[QuickSaveItemIn] = []
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def strip_title(cls, v: str) -> str:
+        return v.strip() if isinstance(v, str) else v
+
+
 class ReminderItemCreate(BaseModel):
     product_id: str | None = Field(default=None, min_length=1)
     name: str = Field(min_length=1, max_length=200)
-    quantity: float = Field(default=0, ge=0)
+    quantity: float = Field(default=1, gt=0)
     unit: str | None = Field(default=None, max_length=50)
     expected_price: float | None = Field(default=None, ge=0)
     notes: str | None = None
@@ -171,7 +211,7 @@ class ReminderItemCreate(BaseModel):
 class ReminderItemUpdate(BaseModel):
     product_id: str | None = None
     name: str | None = Field(default=None, min_length=1, max_length=200)
-    quantity: float | None = Field(default=None, ge=0)
+    quantity: float | None = Field(default=None, gt=0)
     unit: str | None = None
     expected_price: float | None = Field(default=None, ge=0)
     notes: str | None = None

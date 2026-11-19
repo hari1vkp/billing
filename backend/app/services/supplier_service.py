@@ -9,6 +9,8 @@ Design rules enforced here:
     existing ``inventory_service.record_movement`` receiving path.
 """
 
+import json
+import re
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -28,6 +30,7 @@ from app.models.supplier import (
 from app.models.user import User
 from app.schemas.supplier import (
     ConvertToPurchaseIn,
+    QuickSaveIn,
     ReminderItemCreate,
     ReminderItemUpdate,
     ReminderListCreate,
@@ -54,6 +57,70 @@ class ValidationError(Exception):
 
 class ConflictError(Exception):
     pass
+
+
+class RelationshipError(ValidationError):
+    """A reminder item's product_id is not linked to its list's supplier."""
+
+
+def _parse_description_metadata(description: str | None) -> dict[str, str | None]:
+    """Read explicitly stored catalogue metadata from a product description.
+
+    The importer encodes metadata as ``Label: value | Label: value`` and the
+    catalogue prompt uses the same labels, but a JSON object is accepted too.
+    Values are returned ONLY when the label/key is actually present — nothing
+    is guessed from the product name or from free-form prose.
+    """
+    result: dict[str, str | None] = {
+        "brand": None,
+        "category": None,
+        "variant": None,
+        "size_pack": None,
+    }
+    if not description or not str(description).strip():
+        return result
+
+    text = str(description).strip()
+
+    if text.startswith("{"):
+        try:
+            payload = json.loads(text)
+        except (ValueError, TypeError):
+            payload = None
+        if isinstance(payload, dict):
+            aliases = {
+                "brand": ("brand",),
+                "category": ("category",),
+                "variant": ("variant",),
+                "size_pack": ("size_pack", "size", "size_pack_size", "size / pack size"),
+            }
+            lowered = {str(k).strip().lower(): v for k, v in payload.items()}
+            for key, names in aliases.items():
+                for name in names:
+                    value = lowered.get(name)
+                    if value is not None and str(value).strip():
+                        result[key] = str(value).strip()
+                        break
+            return result
+
+    aliases = {
+        "brand": ("brand",),
+        "category": ("category",),
+        "variant": ("variant",),
+        "size_pack": ("size", "size_pack", "size / pack size", "pack size"),
+    }
+    for segment in re.split(r"[|\n]", text):
+        if ":" not in segment:
+            continue
+        label, _, value = segment.partition(":")
+        label = label.strip().lower()
+        value = value.strip()
+        if not value:
+            continue
+        for key, names in aliases.items():
+            if label in names and result[key] is None:
+                result[key] = value
+    return result
 
 
 def _money(value) -> float:
@@ -282,6 +349,43 @@ def supplier_product_out(link: SupplierProduct):
     return SupplierProductOut.model_validate(link)
 
 
+def supplier_product_card_out(db: Session, link: SupplierProduct):
+    """Build a reminder-card DTO from the link + its product (never the global catalogue)."""
+    from app.schemas.supplier import SupplierProductCardOut
+
+    product = None
+    if link.product_id:
+        product = db.execute(
+            select(Product).where(
+                Product.id == link.product_id, Product.business_id == link.business_id
+            )
+        ).scalars().first()
+
+    meta = _parse_description_metadata(product.description if product else None)
+    product_unit = str(product.unit) if product and product.unit else None
+    resolved_unit = link.unit or product_unit
+
+    return SupplierProductCardOut(
+        id=link.id,
+        business_id=link.business_id,
+        supplier_id=link.supplier_id,
+        product_id=link.product_id,
+        custom_name=link.custom_name,
+        unit=resolved_unit,
+        supplier_sku=link.supplier_sku,
+        supplier_price=link.supplier_price,
+        notes=link.notes,
+        created_at=link.created_at,
+        updated_at=link.updated_at,
+        product_name=product.name if product else None,
+        product_brand=meta["brand"],
+        product_category=meta["category"],
+        product_variant=meta["variant"],
+        product_size_pack=meta["size_pack"],
+        product_unit=product_unit,
+    )
+
+
 def _get_link(
     db: Session, business_id: str, supplier_id: str, link_id: str
 ) -> SupplierProduct:
@@ -306,6 +410,30 @@ def _validate_product(db: Session, business_id: str, product_id: str) -> Product
     if not product:
         raise ValidationError("Linked BillFlow product not found")
     return product
+
+
+def _validate_supplier_product_link(
+    db: Session, business_id: str, supplier_id: str, product_id: str
+) -> SupplierProduct | None:
+    """Require a link to this exact supplier, not merely to any supplier.
+
+    A product may legitimately be offered by several suppliers. A product that
+    is offered by one or more *other* suppliers must be rejected for this list.
+    Products that were never offered by any supplier (legacy catalogue rows)
+    are grandfathered: there is no conflicting supplier relationship to reject.
+    """
+    links = db.execute(
+        select(SupplierProduct).where(
+            SupplierProduct.business_id == business_id,
+            SupplierProduct.product_id == product_id,
+        )
+    ).scalars().all()
+    if not links:
+        return None
+    for link in links:
+        if link.supplier_id == supplier_id:
+            return link
+    raise RelationshipError("Product is not linked to this supplier")
 
 
 def list_supplier_products(db: Session, business_id: str, supplier_id: str):
@@ -550,6 +678,22 @@ def _get_reminder_item(
     return item
 
 
+def find_existing_reminder_item(
+    db: Session, business_id: str, list_id: str, product_id: str | None
+) -> PurchaseReminderItem | None:
+    """Find an existing item for a product on a list (endpoint-level dedupe)."""
+    if not product_id:
+        return None
+    _get_reminder_list(db, business_id, list_id)
+    return db.execute(
+        select(PurchaseReminderItem).where(
+            PurchaseReminderItem.business_id == business_id,
+            PurchaseReminderItem.list_id == list_id,
+            PurchaseReminderItem.product_id == product_id,
+        )
+    ).scalars().first()
+
+
 def add_reminder_item(
     db: Session,
     business_id: str,
@@ -559,8 +703,12 @@ def add_reminder_item(
 ) -> PurchaseReminderItem:
     reminder_list = _get_reminder_list(db, business_id, list_id)
     payload = data.model_dump()
-    if payload.get("product_id"):
-        _validate_product(db, business_id, payload["product_id"])
+    product_id = payload.get("product_id")
+    if product_id:
+        _validate_product(db, business_id, product_id)
+        _validate_supplier_product_link(
+            db, business_id, reminder_list.supplier_id, product_id
+        )
     item = PurchaseReminderItem(
         business_id=business_id, list_id=reminder_list.id, **payload
     )
@@ -590,9 +738,13 @@ def update_reminder_item(
 ) -> PurchaseReminderItem:
     # NOTE: this only mutates reminder-item fields. Stock is NEVER touched here.
     item = _get_reminder_item(db, business_id, list_id, item_id)
+    reminder_list = _get_reminder_list(db, business_id, list_id)
     payload = data.model_dump(exclude_unset=True)
     if payload.get("product_id"):
         _validate_product(db, business_id, payload["product_id"])
+        _validate_supplier_product_link(
+            db, business_id, reminder_list.supplier_id, payload["product_id"]
+        )
     for key, value in payload.items():
         setattr(item, key, value)
     db.flush()
@@ -629,6 +781,170 @@ def delete_reminder_item(
         entity_type="purchase_reminder_item",
         entity_id=item_id,
     )
+
+
+def delete_reminder_list(
+    db: Session, business_id: str, list_id: str, user_id: str | None = None
+) -> None:
+    """Delete a reminder list together with all of its items.
+
+    Purely a reminder operation: stock is never read or written here.
+    """
+    reminder_list = _get_reminder_list(db, business_id, list_id)
+    items = db.execute(
+        select(PurchaseReminderItem).where(
+            PurchaseReminderItem.business_id == business_id,
+            PurchaseReminderItem.list_id == list_id,
+        )
+    ).scalars().all()
+    for item in items:
+        db.delete(item)
+    db.delete(reminder_list)
+    db.flush()
+    audit_service.log_activity(
+        db,
+        business_id,
+        user_id=user_id,
+        action="supplier.reminder.remove",
+        category="supplier",
+        reference=reminder_list.title,
+        entity_type="purchase_reminder_list",
+        entity_id=list_id,
+        details={"item_count": len(items)},
+    )
+
+
+def carry_forward_reminder_list(
+    db: Session, business_id: str, list_id: str, user_id: str | None = None
+):
+    """Create a new pending list holding only this list's unfinished items."""
+    source = _get_reminder_list(db, business_id, list_id)
+    pending = db.execute(
+        select(PurchaseReminderItem)
+        .where(
+            PurchaseReminderItem.business_id == business_id,
+            PurchaseReminderItem.list_id == list_id,
+            PurchaseReminderItem.is_purchased.is_(False),
+        )
+        .order_by(PurchaseReminderItem.created_at.asc(), PurchaseReminderItem.id.asc())
+    ).scalars().all()
+
+    new_list = PurchaseReminderList(
+        business_id=business_id,
+        supplier_id=source.supplier_id,
+        title=f"{source.title} (next visit)",
+        status="pending",
+        notes=source.notes,
+        created_by=user_id,
+    )
+    db.add(new_list)
+    db.flush()
+
+    for item in pending:
+        db.add(
+            PurchaseReminderItem(
+                business_id=business_id,
+                list_id=new_list.id,
+                product_id=item.product_id,
+                name=item.name,
+                quantity=item.quantity,
+                unit=item.unit,
+                expected_price=item.expected_price,
+                notes=item.notes,
+                is_purchased=False,
+            )
+        )
+    db.flush()
+    audit_service.log_activity(
+        db,
+        business_id,
+        user_id=user_id,
+        action="supplier.reminder.carry_forward",
+        category="supplier",
+        reference=new_list.title,
+        entity_type="purchase_reminder_list",
+        entity_id=new_list.id,
+        details={"source_list_id": list_id, "item_count": len(pending)},
+    )
+    return reminder_list_out(db, new_list)
+
+
+def quick_save_reminder(
+    db: Session,
+    business_id: str,
+    supplier_id: str,
+    data: QuickSaveIn,
+    user_id: str | None = None,
+):
+    """Create a reminder list and all of its items in ONE transaction.
+
+    Unit defaults come from the supplier-product override, then the product's
+    unit. A repeated product_id in the payload keeps only the first quantity.
+    """
+    _get_supplier(db, business_id, supplier_id)
+
+    # Resolve and validate every line before writing, so a cross-supplier or
+    # missing product cannot leave a partially created list behind. Python
+    # dicts preserve insertion order, which gives us "first quantity wins".
+    prepared: list[dict] = []
+    seen: set[str] = set()
+    for item in data.items:
+        product_id = item.product_id
+        if product_id in seen:
+            continue
+        product = _validate_product(db, business_id, product_id)
+        link = _validate_supplier_product_link(db, business_id, supplier_id, product_id)
+        seen.add(product_id)
+        prepared.append(
+            {
+                "product": product,
+                "quantity": item.quantity,
+                "unit": item.unit or (link.unit if link else None) or product.unit or "pcs",
+                "expected_price": item.expected_price,
+                "notes": item.notes,
+            }
+        )
+
+    with db.begin_nested():
+        reminder_list = PurchaseReminderList(
+            business_id=business_id,
+            supplier_id=supplier_id,
+            title=data.title,
+            notes=data.notes,
+            created_by=user_id,
+        )
+        db.add(reminder_list)
+        db.flush()
+
+        for entry in prepared:
+            product = entry["product"]
+            db.add(
+                PurchaseReminderItem(
+                    business_id=business_id,
+                    list_id=reminder_list.id,
+                    product_id=product.id,
+                    name=product.name,
+                    quantity=entry["quantity"],
+                    unit=entry["unit"],
+                    expected_price=entry["expected_price"],
+                    notes=entry["notes"],
+                    is_purchased=False,
+                )
+            )
+        db.flush()
+        audit_service.log_activity(
+            db,
+            business_id,
+            user_id=user_id,
+            action="supplier.reminder.quick_save",
+            category="supplier",
+            reference=data.title,
+            entity_type="purchase_reminder_list",
+            entity_id=reminder_list.id,
+            details={"supplier_id": supplier_id, "item_count": len(prepared)},
+        )
+
+    return reminder_list_out(db, reminder_list)
 
 
 # ---------------------------------------------------------------------------

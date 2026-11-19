@@ -13,6 +13,8 @@ class Product(BaseModel):
         ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Free-text unit of measure, owner editable. Additive metadata only.
+    unit: Mapped[str] = mapped_column(String(32), default="pcs", nullable=False)
     sku: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     barcode: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

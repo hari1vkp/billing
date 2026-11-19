@@ -198,6 +198,11 @@ fn default_pricing_mode() -> String {
     "retail".to_string()
 }
 
+/// Products default to a plain "pcs" unit when older payloads omit it.
+fn default_unit() -> String {
+    "pcs".to_string()
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Product {
     pub id: String,
@@ -205,6 +210,10 @@ pub struct Product {
     pub name: String,
     pub sku: String,
     pub description: String,
+    /// Free-text unit of measure (e.g. "pcs", "kg"). Defaults to `"pcs"` so
+    /// older payloads and rows stay deserializable.
+    #[serde(default = "default_unit")]
+    pub unit: String,
     pub hsn_code: String,
     pub barcode: Option<String>,
     pub price: f64,
@@ -407,6 +416,8 @@ pub struct SupplierProduct {
     pub custom_name: Option<String>,
     pub supplier_sku: Option<String>,
     pub supplier_price: f64,
+    /// Optional per-supplier unit override; falls back to the product's unit.
+    pub unit: Option<String>,
     pub notes: Option<String>,
 }
 

@@ -151,6 +151,8 @@ export interface Product {
   id: string;
   business_id: string;
   name: string;
+  /** Free-text unit of measure (e.g. pcs, boxes, kg). Additive metadata. */
+  unit?: string | null;
   sku?: string | null;
   barcode?: string | null;
   description?: string | null;
@@ -731,6 +733,16 @@ export interface SupplierProduct {
   supplier_sku?: string | null;
   supplier_price?: number | null;
   notes?: string | null;
+  /* Display metadata returned by GET /suppliers/{id}/products (additive).
+     Derived from the linked product only — never invented by the UI. */
+  product_brand?: string | null;
+  product_category?: string | null;
+  product_variant?: string | null;
+  product_size_pack?: string | null;
+  /** The product's own unit of measure. */
+  product_unit?: string | null;
+  /** Effective unit for this supplier (override, falling back to product_unit). */
+  unit?: string | null;
 }
 
 export interface SupplierProductInput {
@@ -815,6 +827,22 @@ export type SupplierDetail = Supplier & {
 };
 
 /** Response from `POST /suppliers/reminders/{list_id}/convert-to-purchase`. */
+/** One line of `POST /suppliers/{supplier_id}/reminders/quick-save`. */
+export interface QuickReminderItemInput {
+  product_id: string;
+  quantity: number;
+  unit?: string;
+  expected_price?: number | null;
+  notes?: string;
+}
+
+/** Body of `POST /suppliers/{supplier_id}/reminders/quick-save`. */
+export interface QuickReminderPayload {
+  title: string;
+  notes?: string;
+  items: QuickReminderItemInput[];
+}
+
 export interface SupplierPurchaseConversion {
   message?: string;
   purchase_number?: string;
