@@ -475,5 +475,23 @@ pub fn migrate(conn: &Connection) -> Result<()> {
     if !has_column(conn, "supplier_products", "unit")? {
         conn.execute_batch("ALTER TABLE supplier_products ADD COLUMN unit TEXT;")?;
     }
+
+    // One supplier cannot link the same real product twice. Custom-name items
+    // (product_id IS NULL) are exempt. Deduplicate historical rows first, then
+    // add a partial unique index. Reminder items keep their own snapshots, so
+    // this cannot damage historical records.
+    conn.execute_batch(
+        "DELETE FROM supplier_products WHERE id IN (
+            SELECT id FROM (
+                SELECT id, ROW_NUMBER() OVER (
+                    PARTITION BY business_id, supplier_id, product_id
+                    ORDER BY id) AS rn
+                FROM supplier_products WHERE product_id IS NOT NULL
+            ) WHERE rn > 1
+         );
+         CREATE UNIQUE INDEX IF NOT EXISTS uq_supplier_product_link
+           ON supplier_products (business_id, supplier_id, product_id)
+           WHERE product_id IS NOT NULL;",
+    )?;
     Ok(())
 }

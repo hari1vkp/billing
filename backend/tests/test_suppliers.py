@@ -38,6 +38,7 @@ from app.schemas.supplier import (
     SupplierCreate,
     SupplierProductCreate,
     SupplierUpdate,
+    VisitCreate,
 )
 from app.services import supplier_service
 
@@ -228,6 +229,7 @@ class SupplierTests(unittest.TestCase):
         first = self._list(supplier, "Week 1")
         second = self._list(supplier, "Week 2")
         p1 = self._product("Atta", stock=2)
+        self._link(supplier, product_id=p1.id)
         item1 = self._item(first, "Atta", product_id=p1.id, quantity=2, unit="bags")
         self._item(first, "Sugar", quantity=1, unit="kg")
         item3 = self._item(second, "Tea", quantity=3, unit="boxes")
@@ -275,6 +277,7 @@ class SupplierTests(unittest.TestCase):
     def test_marking_purchased_does_not_change_stock_or_create_movement(self):
         product = self._product("Biscuits", stock=5)
         supplier = self._supplier("Snacks Vendor")
+        self._link(supplier, product_id=product.id)
         reminder_list = self._list(supplier)
         item = self._item(
             reminder_list,
@@ -304,6 +307,7 @@ class SupplierTests(unittest.TestCase):
     def test_conversion_creates_real_stock_movements_and_converts_list(self):
         product = self._product("Milk", price=40, stock=5)
         supplier = self._supplier("Dairy Vendor")
+        self._link(supplier, product_id=product.id)
         reminder_list = self._list(supplier, "Restock")
         first = self._item(
             reminder_list, "Milk 1L", product_id=product.id, quantity=2,
@@ -383,6 +387,7 @@ class SupplierTests(unittest.TestCase):
     def test_conversion_all_when_only_purchased_false(self):
         product = self._product("Nuts", price=100, stock=0)
         supplier = self._supplier("Nuts Vendor")
+        self._link(supplier, product_id=product.id)
         reminder_list = self._list(supplier)
         purchased = self._item(
             reminder_list, "Almonds", product_id=product.id, quantity=1
@@ -487,6 +492,107 @@ class SupplierTests(unittest.TestCase):
         self.assertEqual(
             SupplierCreate(name=" OK ", phone="+91 98765-43210").name, "OK"
         )
+
+
+    # -- safety improvements ------------------------------------------------
+    def test_active_filter_and_reactivation(self):
+        active = self._supplier("Active Vendor")
+        inactive = self._supplier("Inactive Vendor")
+        supplier_service.deactivate_supplier(
+            self.db, self.business_id, inactive.id, self.user_id
+        )
+        self.db.commit()
+
+        active_rows, active_total = supplier_service.list_suppliers(
+            self.db, self.business_id, is_active=True
+        )
+        inactive_rows, inactive_total = supplier_service.list_suppliers(
+            self.db, self.business_id, is_active=False
+        )
+        self.assertEqual(active_total, 1)
+        self.assertEqual([s.id for s in active_rows], [active.id])
+        self.assertEqual(inactive_total, 1)
+        self.assertEqual([s.id for s in inactive_rows], [inactive.id])
+
+        supplier_service.update_supplier(
+            self.db,
+            self.business_id,
+            inactive.id,
+            SupplierUpdate(is_active=True),
+            self.user_id,
+        )
+        self.db.commit()
+        reactivated, total = supplier_service.list_suppliers(
+            self.db, self.business_id, is_active=True
+        )
+        self.assertEqual(total, 2)
+        self.assertIn(inactive.id, [s.id for s in reactivated])
+
+    def test_duplicate_supplier_product_is_rejected(self):
+        product = self._product("Soap")
+        supplier = self._supplier("Vendor")
+        self._link(supplier, product_id=product.id)
+        with self.assertRaises(supplier_service.ValidationError):
+            self._link(supplier, product_id=product.id)
+        # Custom-name items remain allowed and are not considered duplicates.
+        self._link(supplier, custom_name="Local handmade item")
+
+    def test_historical_reminder_item_stays_editable_after_unlink(self):
+        product = self._product("Atta")
+        supplier = self._supplier("Vendor")
+        link = self._link(supplier, product_id=product.id)
+        reminder_list = self._list(supplier)
+        item = self._item(
+            reminder_list, "Atta", product_id=product.id, quantity=2, unit="bags"
+        )
+        self.db.flush()
+        self.db.delete(link)
+        self.db.commit()
+
+        updated = supplier_service.update_reminder_item(
+            self.db,
+            self.business_id,
+            reminder_list.id,
+            item.id,
+            ReminderItemUpdate(quantity=5, notes="still needed"),
+            self.user_id,
+        )
+        self.db.commit()
+        self.assertEqual(float(updated.quantity), 5.0)
+        self.assertEqual(updated.product_id, product.id)
+
+        with self.assertRaises(supplier_service.RelationshipError):
+            self._item(
+                reminder_list, "Atta again", product_id=product.id, quantity=1
+            )
+
+    def test_deactivation_preserves_all_history(self):
+        product = self._product("Rice")
+        supplier = self._supplier("Vendor")
+        self._link(supplier, product_id=product.id)
+        reminder_list = self._list(supplier)
+        self._item(reminder_list, "Rice", product_id=product.id, quantity=2)
+        supplier_service.create_visit(
+            self.db,
+            self.business_id,
+            supplier.id,
+            VisitCreate(visit_date=date(2026, 11, 20), discussion_notes="Rates"),
+            self.user_id,
+        )
+        self.db.commit()
+        supplier_service.deactivate_supplier(
+            self.db, self.business_id, supplier.id, self.user_id
+        )
+        self.db.commit()
+
+        detail = supplier_service.get_supplier_detail(
+            self.db, self.business_id, supplier.id
+        )
+        self.assertFalse(detail.is_active)
+        self.assertEqual(len(detail.products), 1)
+        self.assertEqual(len(detail.reminder_lists), 1)
+        self.assertEqual(len(detail.visits), 1)
+
 
 
 class SupplierApiTests(unittest.TestCase):
@@ -646,7 +752,6 @@ class SupplierMigrationTests(unittest.TestCase):
             self.assertEqual(row[0], "Legacy Vendor")
             self.assertEqual(row[1], 1)
         engine.dispose()
-
 
 if __name__ == "__main__":
     unittest.main()

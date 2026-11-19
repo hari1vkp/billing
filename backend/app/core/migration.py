@@ -276,6 +276,32 @@ def run_migrations(engine: Engine) -> None:
                 )
             )
 
+        # One supplier cannot link the same real product twice. Custom-name
+        # items (product_id IS NULL) are intentionally exempt. Remove any
+        # historical duplicates (keeping the oldest link) before adding the
+        # partial unique index; reminders store their own product snapshots so
+        # dropping a duplicate link cannot damage historical records.
+        if "supplier_products" in table_names:
+            conn.execute(
+                text(
+                    "DELETE FROM supplier_products WHERE id IN ("
+                    "SELECT id FROM ("
+                    "SELECT id, ROW_NUMBER() OVER ("
+                    "PARTITION BY business_id, supplier_id, product_id "
+                    "ORDER BY id) AS rn "
+                    "FROM supplier_products WHERE product_id IS NOT NULL"
+                    ") WHERE rn > 1)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS "
+                    "uq_supplier_product_link ON supplier_products "
+                    "(business_id, supplier_id, product_id) "
+                    "WHERE product_id IS NOT NULL"
+                )
+            )
+
         # StockMovement.reason is a plain VARCHAR(50); no schema change is needed
         # for the new "purchase" reason. Conversion uses the existing receiving
         # path (inventory_service.record_movement), which accepts any reason.

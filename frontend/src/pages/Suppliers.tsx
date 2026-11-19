@@ -13,6 +13,7 @@ import {
   Phone,
   Plus,
   PowerOff,
+  RotateCcw,
   Search,
   Trash2,
   Truck,
@@ -182,6 +183,9 @@ function SupplierForm({
   const [saving, setSaving] = useState(false);
   const [catalog, setCatalog] = useState<Product[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [catalogPages, setCatalogPages] = useState(1);
+  const [catalogTotal, setCatalogTotal] = useState(0);
   const [productSearch, setProductSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [existingLinks, setExistingLinks] = useState<SupplierProduct[]>([]);
@@ -190,13 +194,9 @@ function SupplierForm({
     if (!open) return;
     let active = true;
     setProductSearch('');
+    setCatalogPage(1);
     setSelectedIds([]);
     setExistingLinks([]);
-    setCatalogLoading(true);
-    api.get<Paginated<Product>>('/products', { page_size: 200 })
-      .then((response) => { if (active) setCatalog(response.items); })
-      .catch(() => { /* catalogue remains empty; supplier details still editable */ })
-      .finally(() => { if (active) setCatalogLoading(false); });
     if (initial?.id) {
       api.get<SupplierProduct[] | { items: SupplierProduct[] }>(`/suppliers/${initial.id}/products`)
         .then((response) => {
@@ -211,6 +211,32 @@ function SupplierForm({
     }
     return () => { active = false; };
   }, [open, initial?.id]);
+
+  // Server-side search + pagination: no 200-product ceiling, and selection is
+  // kept in selectedIds so it survives page changes.
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setCatalogLoading(true);
+    const timer = window.setTimeout(() => {
+      api.get<Paginated<Product>>('/products', {
+        q: productSearch.trim() || undefined,
+        page: catalogPage,
+        page_size: 24,
+      })
+        .then((response) => {
+          if (!active) return;
+          setCatalog(response.items);
+          setCatalogPages(response.pages);
+          setCatalogTotal(response.total);
+        })
+        .catch(() => {
+          if (active) { setCatalog([]); setCatalogPages(1); setCatalogTotal(0); }
+        })
+        .finally(() => { if (active) setCatalogLoading(false); });
+    }, 220);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [open, productSearch, catalogPage]);
 
   useEffect(() => {
     if (!open) return;
@@ -246,16 +272,6 @@ function SupplierForm({
   function set(field: keyof SupplierInput, value: string | boolean) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
-
-  const filteredCatalog = useMemo(() => {
-    const term = productSearch.trim().toLowerCase();
-    if (!term) return catalog;
-    return catalog.filter((product) =>
-      [product.name, product.sku, product.barcode].some((value) =>
-        (value ?? '').toLowerCase().includes(term),
-      ),
-    );
-  }, [catalog, productSearch]);
 
   function toggleProduct(productId: string) {
     setSelectedIds((previous) =>
@@ -398,16 +414,16 @@ function SupplierForm({
           </div>
           <Input
             value={productSearch}
-            onChange={(event) => setProductSearch(event.target.value)}
+            onChange={(event) => { setProductSearch(event.target.value); setCatalogPage(1); }}
             placeholder="Search your store products by name, SKU or barcode…"
             aria-label="Search store products"
           />
           {catalogLoading ? (
             <Loader label="Loading products…" />
-          ) : filteredCatalog.length ? (
+          ) : catalog.length ? (
             <div className="supplier-catalog-scroll">
               <div className="supplier-card-grid supplier-card-grid--compact">
-                {filteredCatalog.map((product) => {
+                {catalog.map((product) => {
                   const isSelected = selectedIds.includes(product.id);
                   return (
                     <button
@@ -438,6 +454,10 @@ function SupplierForm({
             </div>
           ) : (
             <p className="muted small">No store products found. Add products in Inventory first.</p>
+          )}
+          {catalogTotal > 24 && (
+            <Pagination page={catalogPage} pages={catalogPages} total={catalogTotal}
+              pageSize={24} onPage={setCatalogPage} />
           )}
           <p className="supplier-help">
             Choose products this supplier provides. Tap a selected card again to remove it.
@@ -1757,6 +1777,8 @@ function SupplierProfileDrawer({
   const [editOpen, setEditOpen] = useState(false);
   const [deactivateOpen, setDeactivateOpen] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
+  const [reactivateOpen, setReactivateOpen] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -1804,6 +1826,22 @@ function SupplierProfileDrawer({
     }
   }
 
+  async function reactivate() {
+    if (!detail) return;
+    setReactivating(true);
+    try {
+      await api.patch<Supplier>(`/suppliers/${detail.id}`, { is_active: true });
+      toast.success(`${detail.name} is active again.`);
+      setReactivateOpen(false);
+      await reload();
+      onChanged();
+    } catch (error) {
+      toast.error(errorMessage(error, 'Could not reactivate the supplier.'));
+    } finally {
+      setReactivating(false);
+    }
+  }
+
   if (loading) {
     return (
       <Drawer open onClose={onClose} title="Supplier">
@@ -1833,10 +1871,15 @@ function SupplierProfileDrawer({
               onClick={() => setEditOpen(true)}>
               Edit profile
             </Button>
-            {detail.is_active && (
+            {detail.is_active ? (
               <Button size="sm" variant="ghost" icon={<PowerOff size={14} />}
                 onClick={() => setDeactivateOpen(true)}>
                 Deactivate
+              </Button>
+            ) : (
+              <Button size="sm" variant="secondary" icon={<RotateCcw size={14} />}
+                onClick={() => setReactivateOpen(true)}>
+                Reactivate
               </Button>
             )}
           </div>
@@ -1923,6 +1966,16 @@ function SupplierProfileDrawer({
         danger
         loading={deactivating}
       />
+
+      <ConfirmDialog
+        open={reactivateOpen}
+        onClose={() => setReactivateOpen(false)}
+        onConfirm={() => void reactivate()}
+        title="Reactivate this supplier?"
+        description="The supplier will return to Active Suppliers and can be used for new purchases again."
+        confirmLabel="Reactivate"
+        loading={reactivating}
+      />
     </>
   );
 }
@@ -1950,6 +2003,8 @@ export function Suppliers() {
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [deactivating, setDeactivating] = useState<Supplier | null>(null);
+  const [reactivating, setReactivating] = useState<Supplier | null>(null);
+  const [statusTab, setStatusTab] = useState<'active' | 'deactivated'>('active');
 
   const loadSuggestions = useCallback(async () => {
     try {
@@ -1979,6 +2034,7 @@ export function Suppliers() {
         q: query || undefined,
         category: category || undefined,
         product_type: productType || undefined,
+        is_active: statusTab === 'active',
         sort: field,
         order,
         page,
@@ -1992,7 +2048,7 @@ export function Suppliers() {
     } finally {
       setLoading(false);
     }
-  }, [query, category, productType, sort, page, toast]);
+  }, [query, category, productType, statusTab, sort, page, toast]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -2006,6 +2062,19 @@ export function Suppliers() {
       await loadSuggestions();
     } catch (error) {
       toast.error(errorMessage(error, 'Could not deactivate the supplier.'));
+    }
+  }
+
+  async function reactivate() {
+    if (!reactivating) return;
+    try {
+      await api.patch<Supplier>(`/suppliers/${reactivating.id}`, { is_active: true });
+      toast.success(`${reactivating.name} is active again.`);
+      setReactivating(null);
+      await load();
+      await loadSuggestions();
+    } catch (error) {
+      toast.error(errorMessage(error, 'Could not reactivate the supplier.'));
     }
   }
 
@@ -2032,6 +2101,19 @@ export function Suppliers() {
           </Button>
         }
       />
+
+      <div className="admin-tabs supplier-status-tabs" role="tablist" aria-label="Supplier status">
+        <button type="button" role="tab" aria-selected={statusTab === 'active'}
+          className={statusTab === 'active' ? 'admin-tab admin-tab--active' : 'admin-tab'}
+          onClick={() => { setStatusTab('active'); setPage(1); }}>
+          Active Suppliers
+        </button>
+        <button type="button" role="tab" aria-selected={statusTab === 'deactivated'}
+          className={statusTab === 'deactivated' ? 'admin-tab admin-tab--active' : 'admin-tab'}
+          onClick={() => { setStatusTab('deactivated'); setPage(1); }}>
+          Deactivated Suppliers
+        </button>
+      </div>
 
       <Card className="filter-bar supplier-filter">
         <div className="filter-bar__search">
@@ -2136,10 +2218,15 @@ export function Suppliers() {
                           onClick={(event) => { event.stopPropagation(); setEditing(row); setFormOpen(true); }}>
                           <Pencil size={15} />
                         </button>
-                        {row.is_active && (
+                        {row.is_active ? (
                           <button type="button" className="icon-btn" aria-label="Deactivate supplier"
                             onClick={(event) => { event.stopPropagation(); setDeactivating(row); }}>
                             <PowerOff size={15} />
+                          </button>
+                        ) : (
+                          <button type="button" className="icon-btn" aria-label="Reactivate supplier"
+                            onClick={(event) => { event.stopPropagation(); setReactivating(row); }}>
+                            <RotateCcw size={15} />
                           </button>
                         )}
                       </td>
@@ -2182,6 +2269,15 @@ export function Suppliers() {
         description="The supplier will be hidden from active lists. Products, reminders and visit history stay intact."
         confirmLabel="Deactivate"
         danger
+      />
+
+      <ConfirmDialog
+        open={Boolean(reactivating)}
+        onClose={() => setReactivating(null)}
+        onConfirm={() => void reactivate()}
+        title="Reactivate this supplier?"
+        description="The supplier will return to Active Suppliers and can be used for new purchases again."
+        confirmLabel="Reactivate"
       />
     </>
   );

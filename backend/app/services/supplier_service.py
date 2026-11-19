@@ -150,12 +150,15 @@ def list_suppliers(
     q: str | None = None,
     category: str | None = None,
     product_type: str | None = None,
+    is_active: bool | None = None,
     sort: str | None = None,
     order: str | None = None,
     skip: int = 0,
     limit: int = 20,
 ):
     stmt = select(Supplier).where(Supplier.business_id == business_id)
+    if is_active is not None:
+        stmt = stmt.where(Supplier.is_active.is_(is_active))
     if q:
         like = f"%{q.strip()}%"
         stmt = stmt.where(
@@ -419,10 +422,9 @@ def _validate_supplier_product_link(
 ) -> SupplierProduct | None:
     """Require a link to this exact supplier, not merely to any supplier.
 
-    A product may legitimately be offered by several suppliers. A product that
-    is offered by one or more *other* suppliers must be rejected for this list.
-    Products that were never offered by any supplier (legacy catalogue rows)
-    are grandfathered: there is no conflicting supplier relationship to reject.
+    New reminder items must reference a product currently supplied by THIS
+    supplier. Historical reminder items are never re-validated when edited,
+    so unlinking a product later cannot break saved records.
     """
     links = db.execute(
         select(SupplierProduct).where(
@@ -431,7 +433,7 @@ def _validate_supplier_product_link(
         )
     ).scalars().all()
     if not links:
-        return None
+        raise RelationshipError("Product is not linked to this supplier")
     for link in links:
         if link.supplier_id == supplier_id:
             return link
@@ -463,6 +465,15 @@ def add_supplier_product(
     payload = data.model_dump()
     if payload.get("product_id"):
         _validate_product(db, business_id, payload["product_id"])
+        duplicate = db.execute(
+            select(SupplierProduct.id).where(
+                SupplierProduct.business_id == business_id,
+                SupplierProduct.supplier_id == supplier_id,
+                SupplierProduct.product_id == payload["product_id"],
+            )
+        ).first()
+        if duplicate:
+            raise ValidationError("This product is already linked to this supplier")
     elif not payload.get("custom_name"):
         raise ValidationError("A product_id or custom_name is required")
     link = SupplierProduct(
@@ -498,6 +509,16 @@ def update_supplier_product(
     custom_name = payload.get("custom_name", link.custom_name)
     if product_id:
         _validate_product(db, business_id, product_id)
+        if product_id != link.product_id:
+            duplicate = db.execute(
+                select(SupplierProduct.id).where(
+                    SupplierProduct.business_id == business_id,
+                    SupplierProduct.supplier_id == supplier_id,
+                    SupplierProduct.product_id == product_id,
+                )
+            ).first()
+            if duplicate:
+                raise ValidationError("This product is already linked to this supplier")
     elif not custom_name:
         raise ValidationError("A product_id or custom_name is required")
     for key, value in payload.items():
@@ -742,10 +763,13 @@ def update_reminder_item(
     item = _get_reminder_item(db, business_id, list_id, item_id)
     reminder_list = _get_reminder_list(db, business_id, list_id)
     payload = data.model_dump(exclude_unset=True)
-    if payload.get("product_id"):
-        _validate_product(db, business_id, payload["product_id"])
+    requested_product_id = payload.get("product_id")
+    # Historical items stay editable even if their product was later unlinked.
+    # Only a NEW product assignment is validated against current links.
+    if requested_product_id and requested_product_id != item.product_id:
+        _validate_product(db, business_id, requested_product_id)
         _validate_supplier_product_link(
-            db, business_id, reminder_list.supplier_id, payload["product_id"]
+            db, business_id, reminder_list.supplier_id, requested_product_id
         )
     for key, value in payload.items():
         setattr(item, key, value)
