@@ -31,4 +31,8 @@ class Product(BaseModel):
     discount_value: Mapped[float] = mapped_column(
         Numeric(14, 2), default=0.0, nullable=False
     )
+    # Wholesale selling price is derived from `price`, never stored here.
+    wholesale_discount_percent: Mapped[float] = mapped_column(
+        Numeric(5, 2), default=0, nullable=False
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
