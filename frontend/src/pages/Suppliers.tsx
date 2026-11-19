@@ -180,6 +180,37 @@ function SupplierForm({
   const toast = useToast();
   const [form, setForm] = useState<SupplierInput>({});
   const [saving, setSaving] = useState(false);
+  const [catalog, setCatalog] = useState<Product[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [existingLinks, setExistingLinks] = useState<SupplierProduct[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setProductSearch('');
+    setSelectedIds([]);
+    setExistingLinks([]);
+    setCatalogLoading(true);
+    api.get<Paginated<Product>>('/products', { page_size: 200 })
+      .then((response) => { if (active) setCatalog(response.items); })
+      .catch(() => { /* catalogue remains empty; supplier details still editable */ })
+      .finally(() => { if (active) setCatalogLoading(false); });
+    if (initial?.id) {
+      api.get<SupplierProduct[] | { items: SupplierProduct[] }>(`/suppliers/${initial.id}/products`)
+        .then((response) => {
+          if (!active) return;
+          const links = Array.isArray(response) ? response : (response.items ?? []);
+          setExistingLinks(links);
+          setSelectedIds(
+            links.map((link) => link.product_id).filter((id): id is string => Boolean(id)),
+          );
+        })
+        .catch(() => { /* keep associations unchanged if they cannot be loaded */ });
+    }
+    return () => { active = false; };
+  }, [open, initial?.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -216,6 +247,44 @@ function SupplierForm({
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  const filteredCatalog = useMemo(() => {
+    const term = productSearch.trim().toLowerCase();
+    if (!term) return catalog;
+    return catalog.filter((product) =>
+      [product.name, product.sku, product.barcode].some((value) =>
+        (value ?? '').toLowerCase().includes(term),
+      ),
+    );
+  }, [catalog, productSearch]);
+
+  function toggleProduct(productId: string) {
+    setSelectedIds((previous) =>
+      previous.includes(productId)
+        ? previous.filter((id) => id !== productId)
+        : [...previous, productId],
+    );
+  }
+
+  // Associations only — never create or modify inventory products here.
+  async function syncProducts(supplierId: string) {
+    const previousIds = existingLinks
+      .map((link) => link.product_id)
+      .filter((id): id is string => Boolean(id));
+    for (const link of existingLinks) {
+      if (link.product_id && !selectedIds.includes(link.product_id)) {
+        await patchOrDelete<void>(
+          [`/suppliers/products/${link.id}`, `/suppliers/${supplierId}/products/${link.id}`],
+          'delete',
+        );
+      }
+    }
+    for (const productId of selectedIds) {
+      if (!previousIds.includes(productId)) {
+        await api.post(`/suppliers/${supplierId}/products`, { product_id: productId });
+      }
+    }
+  }
+
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!form.name?.trim()) {
@@ -236,13 +305,11 @@ function SupplierForm({
     };
     setSaving(true);
     try {
-      if (initial) {
-        await api.patch<Supplier>(`/suppliers/${initial.id}`, payload);
-        toast.success('Supplier updated.');
-      } else {
-        await api.post<Supplier>('/suppliers', payload);
-        toast.success('Supplier added.');
-      }
+      const saved = initial
+        ? await api.patch<Supplier>(`/suppliers/${initial.id}`, payload)
+        : await api.post<Supplier>('/suppliers', payload);
+      await syncProducts(saved.id);
+      toast.success(initial ? 'Supplier updated.' : 'Supplier added.');
       onSaved();
     } catch (error) {
       toast.error(errorMessage(error, 'Could not save the supplier.'));
@@ -314,6 +381,62 @@ function SupplierForm({
         </div>
         <SuggestionsDatalist id={`${idPrefix}-category-options`} values={suggestions.categories} />
         <SuggestionsDatalist id={`${idPrefix}-brand-options`} values={suggestions.brands} />
+
+        <div className="supplier-products-section">
+          <div className="supplier-section-head">
+            <h4>Products Supplied</h4>
+            <span className="muted small">
+              {selectedIds.length} selected · only these appear in this supplier's purchase reminders
+            </span>
+          </div>
+          <Input
+            value={productSearch}
+            onChange={(event) => setProductSearch(event.target.value)}
+            placeholder="Search your store products by name, SKU or barcode…"
+            aria-label="Search store products"
+          />
+          {catalogLoading ? (
+            <Loader label="Loading products…" />
+          ) : filteredCatalog.length ? (
+            <div className="supplier-catalog-scroll">
+              <div className="supplier-card-grid supplier-card-grid--compact">
+                {filteredCatalog.map((product) => {
+                  const isSelected = selectedIds.includes(product.id);
+                  return (
+                    <button
+                      type="button"
+                      key={product.id}
+                      aria-pressed={isSelected}
+                      className={
+                        isSelected
+                          ? 'supplier-product-card supplier-product-card--selected'
+                          : 'supplier-product-card'
+                      }
+                      onClick={() => toggleProduct(product.id)}
+                    >
+                      <span className="supplier-card__name">{product.name}</span>
+                      {product.sku && <span className="supplier-card__meta">{product.sku}</span>}
+                      <span className="supplier-card__footer">
+                        <span className="supplier-card__unit">{product.unit ?? 'pcs'}</span>
+                        {isSelected && (
+                          <span className="supplier-card__selected">
+                            <Check size={12} /> Selected
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <p className="muted small">No store products found. Add products in Inventory first.</p>
+          )}
+          <p className="supplier-help">
+            Choose products this supplier provides. Tap a selected card again to remove it.
+            No new product records are created here.
+          </p>
+        </div>
 
         <Field label="Notes (optional)">
           <Textarea rows={2} value={form.notes ?? ''} placeholder="Payment terms, delivery details…"
