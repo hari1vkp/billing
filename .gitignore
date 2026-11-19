@@ -1,28 +1,37 @@
 # Python
 __pycache__/
 *.py[cod]
-.venv/
-.env
 *.egg-info/
+.venv/
+venv/
 
-# Node
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node / frontend
 node_modules/
 dist/
 .vite/
 *.tsbuildinfo
 
-# OS / editors
-.DS_Store
-.idea/
-.vscode/
+# Environment & secrets
+.env
+.env.*
+!.env.example
 
-# Logs / data
+# Logs & local data
 *.log
-*.sql
+*.sqlite
+*.sqlite3
+*.db
 postgres_data/
 
-# Rust
-/target/
-
-# Python test caches
-.pytest_cache/
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

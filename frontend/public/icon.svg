@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="BillFlow">
+  <!-- BillFlow mark: the existing white "B" monogram on a rounded square,
+       recolored to the BillFlow palette (black / white, orange as accent only). -->
+  <rect width="64" height="64" rx="14" fill="#0A0A0A"/>
+  <text x="30" y="32" dy="0.35em" text-anchor="middle"
+        font-family="ui-sans-serif, system-ui, -apple-system, sans-serif"
+        font-size="34" font-weight="700" fill="#FFFFFF">B</text>
+  <circle cx="49" cy="46" r="5" fill="#FF6A00"/>
+</svg>
